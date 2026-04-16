@@ -1,0 +1,12 @@
+{
+  "source": "manual",
+  "tool_name": null,
+  "command": "npm run dev",
+  "stdout": "",
+  "stderr": "Access to fetch at 'https://api.example.com/user' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Credentials' header is present on the requested resource. The credentials mode of requests initiated by the Fetch API is controlled by the credentials attribute.",
+  "exit_code": 1,
+  "cwd": "/tmp/sandbox-project",
+  "timestamp": "2026-04-17T12:34:56Z",
+  "project_fingerprint": "sha256-abcdef0123456789",
+  "session_id": null
+}

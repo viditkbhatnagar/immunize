@@ -1,0 +1,12 @@
+{
+  "source": "manual",
+  "tool_name": null,
+  "command": "python app.py",
+  "stdout": "",
+  "stderr": "Traceback (most recent call last):\n  File \"app.py\", line 2, in <module>\n    from requests_oauthlib import OAuth2Session\nModuleNotFoundError: No module named 'requests_oauthlib'",
+  "exit_code": 1,
+  "cwd": "/tmp/sandbox-project",
+  "timestamp": "2026-04-17T12:35:10Z",
+  "project_fingerprint": "sha256-abcdef0123456789",
+  "session_id": null
+}

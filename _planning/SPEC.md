@@ -117,8 +117,10 @@ class CapturePayload(BaseModel):
 
 class Diagnosis(BaseModel):
     root_cause: str
+    # "network" added 2026-04-17 during Phase 1 planning — covers connection
+    # refused, DNS failures, and timeouts not caught by rate_limit/auth/cors.
     error_class: Literal["cors", "import", "auth", "rate_limit",
-                          "type_error", "null_ref", "config", "other"]
+                          "type_error", "null_ref", "config", "network", "other"]
     is_generalizable: bool
     canonical_description: str
     fix_summary: str
@@ -154,7 +156,7 @@ Produce a JSON response matching this exact schema:
 
 {
   "root_cause": <one sentence, <= 30 words>,
-  "error_class": <one of: cors, import, auth, rate_limit, type_error, null_ref, config, other>,
+  "error_class": <one of: cors, import, auth, rate_limit, type_error, null_ref, config, network, other>,
   "is_generalizable": <true if this pattern will recur, false if one-off>,
   "canonical_description": <30-50 words, suitable as SKILL.md description frontmatter>,
   "fix_summary": <what the developer should do, <= 40 words>,

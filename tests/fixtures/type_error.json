@@ -1,0 +1,12 @@
+{
+  "source": "manual",
+  "tool_name": null,
+  "command": "python app.py",
+  "stdout": "",
+  "stderr": "Traceback (most recent call last):\n  File \"app.py\", line 5, in <module>\n    total = \"5\" + 3\nTypeError: can only concatenate str (not \"int\") to str",
+  "exit_code": 1,
+  "cwd": "/tmp/sandbox-project",
+  "timestamp": "2026-04-17T12:36:00Z",
+  "project_fingerprint": "sha256-abcdef0123456789",
+  "session_id": null
+}
