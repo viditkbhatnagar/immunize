@@ -62,6 +62,11 @@ class Diagnosis(BaseModel):
             raise ValueError("slug must be <= 40 chars")
         return v
 
+    @field_validator("language")
+    @classmethod
+    def _normalize_language(cls, v: str) -> str:
+        return v.strip().lower()
+
 
 class GeneratedArtifacts(BaseModel):
     model_config = ConfigDict(extra="forbid")

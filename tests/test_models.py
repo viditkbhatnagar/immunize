@@ -63,6 +63,19 @@ def test_diagnosis_rejects_unknown_error_class() -> None:
         _diag(error_class="teapot")
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("JavaScript", "javascript"),
+        ("  Python  ", "python"),
+        ("go", "go"),
+        ("TypeScript", "typescript"),
+    ],
+)
+def test_diagnosis_language_normalized(raw: str, expected: str) -> None:
+    assert _diag(language=raw).language == expected
+
+
 def test_diagnosis_forbids_extra_fields() -> None:
     payload = _diag_kwargs()
     payload["hallucinated_field"] = "oops"
