@@ -5,21 +5,71 @@ build-backend = "hatchling.build"
 [project]
 name = "immunize"
 version = "0.0.1"
-description = "Your AI coding assistant learns from your errors. Under active development — v0.1.0 coming soon."
+description = "Turn runtime errors from AI coding assistants into verified, cross-tool immunity artifacts (SKILL.md, Cursor rules, Semgrep rules, pytest tests)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Vidit Bhatnagar" }]
-keywords = ["claude-code", "cursor", "ai-coding", "developer-tools"]
+keywords = [
+    "claude-code",
+    "cursor",
+    "codex",
+    "gemini-cli",
+    "ai-coding",
+    "developer-tools",
+    "agentskills",
+    "skills",
+    "regression-tests",
+]
 classifiers = [
     "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
 ]
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "anthropic>=0.40",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-mock>=3.12",
+    "ruff>=0.6",
+    "build",
+    "twine",
+]
+
+[project.scripts]
+immunize = "immunize.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/viditkbhatnagar/immunize"
 Repository = "https://github.com/viditkbhatnagar/immunize"
+Issues = "https://github.com/viditkbhatnagar/immunize/issues"
 
 [tool.hatch.build.targets.wheel]
-bypass-selection = true
+packages = ["src/immunize"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
