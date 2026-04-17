@@ -317,6 +317,29 @@ def verify_cmd(
         raise typer.Exit(1)
 
 
+# --- author-pattern ---------------------------------------------------------
+_FROM_ERROR_OPT = typer.Option(..., "--from-error", exists=True, dir_okay=False)
+_OUTPUT_OPT = typer.Option(..., "--output", file_okay=False)
+_MODEL_OPT = typer.Option(None, "--model")
+
+
+@app.command("author-pattern")
+def author_pattern_cli(
+    from_error: Path = _FROM_ERROR_OPT,
+    output: Path = _OUTPUT_OPT,
+    model: str | None = _MODEL_OPT,
+) -> None:
+    """Draft a new bundled pattern from a CapturePayload error JSON (contributor-only).
+
+    Requires ANTHROPIC_API_KEY. End users never run this; it is the authoring tool
+    used by contributors to add patterns. Lazy-imports `anthropic` inside the
+    forwarded function so `immunize capture` never drags the SDK into its import graph.
+    """
+    from immunize.authoring.cli_author import author_pattern_cmd
+
+    author_pattern_cmd(from_error=from_error, output=output, model=model)
+
+
 # --- helpers ----------------------------------------------------------------
 def _emit_json(obj: dict) -> None:
     """Write exactly one line of JSON to stdout. Never through Rich."""
