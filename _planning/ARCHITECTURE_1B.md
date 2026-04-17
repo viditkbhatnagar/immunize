@@ -130,7 +130,7 @@ def match(payload: CapturePayload, patterns: list[Pattern]) -> list[MatchResult]
     sorted by confidence descending.
     """
 
-def score_pattern(payload: CapturePayload, pattern: Pattern) -> float:
+def score_pattern(payload: CapturePayload, pattern: Pattern) -> MatchResult:
     """
     Confidence scoring. Rough algorithm:
     - Start at 0.0
