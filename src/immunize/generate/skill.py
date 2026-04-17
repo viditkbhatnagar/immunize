@@ -6,7 +6,7 @@ import re
 import anthropic
 
 from immunize.config import ConfigError, build_client
-from immunize.generate import GenerateError
+from immunize.generate._errors import GenerateError
 from immunize.models import CapturePayload, Diagnosis, Settings
 
 SYSTEM_PROMPT = """\
