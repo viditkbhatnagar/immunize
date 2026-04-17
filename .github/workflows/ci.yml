@@ -34,3 +34,22 @@ jobs:
 
       - name: Test
         run: pytest
+
+  pattern-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package (editable) with dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint bundled patterns
+        run: python scripts/pattern_lint.py

@@ -1,0 +1,23 @@
+id: async-fn-called-without-await
+version: 1
+schema_version: 1
+author: "@viditkbhatnagar"
+origin: bundled
+error_class: async
+languages:
+  - python
+description: "An async def is called without await; the coroutine object is used as if it were the resolved value and crashes at the first operation that expects a real return type."
+
+match:
+  stderr_patterns:
+    - "coroutine was never awaited"
+    - "RuntimeWarning"
+  stdout_patterns: []
+  error_class_hint: null
+  min_confidence: 0.75
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30

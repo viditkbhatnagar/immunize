@@ -9,20 +9,14 @@ try:
 except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
-import anthropic
-
 from immunize.models import Settings
-
-
-class ConfigError(Exception):
-    """Raised for configuration errors the user can fix without a traceback."""
-
 
 DEFAULTS: dict[str, Any] = {
     "model": "claude-sonnet-4-6",
     "generate_semgrep": False,
     "verify_timeout_seconds": 30,
     "verify_retry_count": 1,
+    "min_match_confidence": 0.70,
 }
 
 
@@ -44,16 +38,6 @@ def load_settings(
     merged["project_dir"] = project_dir
     merged["state_db_path"] = state_db_path
     return Settings(**merged)
-
-
-def build_client(settings: Settings) -> anthropic.Anthropic:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ConfigError(
-            "ANTHROPIC_API_KEY is not set. "
-            "Run: export ANTHROPIC_API_KEY=sk-... "
-            "— get a key at https://console.anthropic.com/"
-        )
-    return anthropic.Anthropic()
 
 
 def _user_config_path() -> Path:
@@ -81,6 +65,11 @@ def _flatten(doc: dict[str, Any]) -> dict[str, Any]:
         out["verify_timeout_seconds"] = verify["timeout_seconds"]
     if "retry_count" in verify:
         out["verify_retry_count"] = verify["retry_count"]
+    match = doc.get("match") or {}
+    if "min_confidence" in match:
+        out["min_match_confidence"] = match["min_confidence"]
+    if "local_patterns_dir" in match:
+        out["local_patterns_dir"] = Path(match["local_patterns_dir"])
     return out
 
 
@@ -94,6 +83,10 @@ def _read_env() -> dict[str, Any]:
         out["verify_timeout_seconds"] = int(v)
     if (v := os.environ.get("IMMUNIZE_VERIFY_RETRY_COUNT")) is not None:
         out["verify_retry_count"] = int(v)
+    if (v := os.environ.get("IMMUNIZE_MIN_MATCH_CONFIDENCE")) is not None:
+        out["min_match_confidence"] = float(v)
+    if (v := os.environ.get("IMMUNIZE_LOCAL_PATTERNS_DIR")) is not None:
+        out["local_patterns_dir"] = Path(v)
     return out
 
 

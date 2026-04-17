@@ -1,0 +1,23 @@
+id: import-not-found-python
+version: 1
+schema_version: 1
+author: "@viditkbhatnagar"
+origin: bundled
+error_class: import
+languages:
+  - python
+description: "Imports reference a module or symbol that does not exist; raises ModuleNotFoundError or ImportError when the import runs."
+
+match:
+  stderr_patterns:
+    - "ModuleNotFoundError: No module named"
+    - "ImportError: cannot import name"
+  stdout_patterns: []
+  error_class_hint: import
+  min_confidence: 0.70
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30

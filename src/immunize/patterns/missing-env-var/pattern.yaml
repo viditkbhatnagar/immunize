@@ -1,0 +1,23 @@
+id: missing-env-var
+version: 1
+schema_version: 1
+author: "@viditkbhatnagar"
+origin: bundled
+error_class: config
+languages:
+  - python
+description: "Code indexes os.environ directly; missing config surfaces as a raw KeyError with no actionable message."
+
+match:
+  stderr_patterns:
+    - "KeyError:"
+    - "os.environ"
+  stdout_patterns: []
+  error_class_hint: config
+  min_confidence: 0.75
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30

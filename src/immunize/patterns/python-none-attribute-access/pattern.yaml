@@ -1,0 +1,23 @@
+id: python-none-attribute-access
+version: 1
+schema_version: 1
+author: "@viditkbhatnagar"
+origin: bundled
+error_class: null_ref
+languages:
+  - python
+description: "Attribute access on a value that can be None; raises AttributeError: 'NoneType' object has no attribute ..."
+
+match:
+  stderr_patterns:
+    - "AttributeError"
+    - "'NoneType' object has no attribute"
+  stdout_patterns: []
+  error_class_hint: null_ref
+  min_confidence: 0.70
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30
