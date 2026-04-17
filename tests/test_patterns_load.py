@@ -24,6 +24,7 @@ EXPECTED_IDS = {
     "import-not-found-python",
     "missing-env-var",
     "rate-limit-no-backoff",
+    "async-fn-called-without-await",
 }
 
 
