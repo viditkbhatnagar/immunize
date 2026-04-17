@@ -77,6 +77,17 @@ Read each one with a critical eye. Specifically check:
 - Are the `languages` accurate?
 - Is `min_confidence: 0.70` right for this pattern? (Common errors: keep at 0.70. Very specific errors: lower to 0.60. Highly ambiguous errors: raise to 0.80.)
 
+> **error_class vs. error_class_hint.** `error_class` is a free-form
+> string on the `Pattern` model — it does NOT have to match an
+> `ERROR_CLASS_HINTS` key in `matcher.py`. The `match.error_class_hint`
+> field is what links to `ERROR_CLASS_HINTS` (and can be `null`). If no
+> existing hint fits (e.g., `lint` for a static-pattern-only pattern),
+> use a descriptive free-form string for `error_class` and leave
+> `error_class_hint: null`. Don't force a bad fit just to populate the
+> hint — a null hint simply means the confidence scorer adds 0 from the
+> hint term, which is fine when the stderr regexes are specific enough
+> on their own.
+
 **SKILL.md**
 - Is the frontmatter valid? (`name:` matches `immunize-<slug>`, `description:` is present and accurate.)
 - Is the body actionable? (Specific code examples, not vague advice.)
