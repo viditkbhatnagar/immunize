@@ -23,6 +23,14 @@ immunize init
 
 Until then, installing `immunize` from PyPI gets you the `0.0.1` placeholder with no functionality.
 
+**POSIX only in v0.1.x.** macOS and Linux are supported. Windows support is tracked as a separate milestone — the CLI currently refuses to run on `win32` with a clear message.
+
+## Known limitations
+
+- **v0.1.x generates Python pytest files for all error classes**, including errors captured from TypeScript, JavaScript, Go, and other languages. Python errors get the strongest verification (real pytest subprocess proves fail-without-fix and pass-with-fix). Non-Python errors are verified via Python simulations of the error shape — a pattern-based sanity check. Native-language test generation (Jest, Go test, cargo test) is a v0.3 goal.
+- **Injected pytest files are standalone proofs, not live regression guards over your real code.** Each test has the expected fix inlined at the top of the file so the test runs without capture-time scratch modules. Future phases will generate tests that import from your project's actual modules so they catch regressions in user-authored code.
+- **`immunize verify` re-runs the injected pytest file in place.** On non-Python-language immunities, pattern-based tests still pass because the fix is inlined; they document the pattern rather than exercise your code. `immunize verify` exits non-zero if any immunity's test fails.
+
 ## Planning docs
 
 The full design is in [_planning/](./_planning/):
