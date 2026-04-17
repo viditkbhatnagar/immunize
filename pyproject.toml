@@ -38,7 +38,8 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
-    "typer>=0.12",
+    "typer>=0.15",
+    "click>=8.1.7",
     "rich>=13",
     "anthropic>=0.40",
     "pydantic>=2.7",

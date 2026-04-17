@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-18
+
+### Fixed
+- `immunize --help` (and every other CLI command) crashed on fresh
+  installs with `TypeError: Parameter.make_metavar() missing 1
+  required positional argument: 'ctx'`. Root cause: Click 8.2 made
+  `ctx` a required positional, and Typer <0.15 calls it without
+  `ctx`. Our dependency pin (`typer>=0.12`, no Click pin) allowed
+  pip to resolve the broken combo. Pinned `typer>=0.15` and
+  `click>=8.1.7`.
+
 ## [0.1.0] — 2026-04-18
 
 First real release. `immunize` ships as a deterministic, offline pattern
