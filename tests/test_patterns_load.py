@@ -21,6 +21,7 @@ EXPECTED_IDS = {
     "react-hook-missing-dep",
     "fetch-missing-credentials",
     "python-none-attribute-access",
+    "import-not-found-python",
 }
 
 
