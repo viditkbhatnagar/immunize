@@ -1,17 +1,25 @@
 """Verification harness.
 
-User-runtime verification: runs a bundled or local pattern's
-`test_template.py` from inside its own directory (so `Path(__file__).parent
-/ "fixtures"` resolves against the pattern's committed fixtures). A single
-pass/fail check — the dual "fails-without-fix / passes-with-fix" gating
-lives in `scripts/pattern_lint.py` and runs at authoring time, not here.
+User-runtime verification proves the pattern's test_template.py passes in
+the user's Python environment. The bundled fixtures/ directory ships both
+a buggy `repro.*` file (the test is designed to FAIL against this) and a
+correct `fix.*` file (the test PASSES against this). We temporarily swap
+the `fix.*` bytes into the `repro.*` path, run the test once, then
+restore the original repro bytes via a `finally` block. Same swap
+strategy as `scripts/pattern_lint.py`, shrunk to a single direction —
+the authoring-time dual-run (fails-with-repro, passes-with-fix) lives in
+pattern_lint and CI; at user-runtime we only re-verify the passes-with-fix
+half to catch environment drift (missing optional deps, pytest version
+skew).
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import sys
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,25 +52,26 @@ def verify(pattern: Pattern, settings: Settings) -> VerificationResult:
 
     timeout = pattern.verification.timeout_seconds or settings.verify_timeout_seconds
     try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "-x",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-                "--rootdir",
-                str(pattern.directory),
-                pytest_rel,
-            ],
-            cwd=pattern.directory,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=_subprocess_env(),
-        )
+        with _swap_fix_over_repro(pattern.directory):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-x",
+                    "-q",
+                    "-p",
+                    "no:cacheprovider",
+                    "--rootdir",
+                    str(pattern.directory),
+                    pytest_rel,
+                ],
+                cwd=pattern.directory,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=_subprocess_env(),
+            )
     except subprocess.TimeoutExpired:
         return VerificationResult(
             passed=False,
@@ -75,6 +84,32 @@ def verify(pattern: Pattern, settings: Settings) -> VerificationResult:
         passed=False,
         error_message=_describe(f"verify {pattern.id}", result),
     )
+
+
+@contextlib.contextmanager
+def _swap_fix_over_repro(pattern_dir: Path) -> Iterator[None]:
+    """Copy fix.* bytes over repro.* for the duration of the subprocess run,
+    then restore. Same swap strategy as scripts/pattern_lint.py, shrunk to
+    the pass-with-fix direction. If no repro+fix pair exists (minimal
+    hand-built patterns in tests), yield unchanged.
+    """
+    fixtures_dir = pattern_dir / "fixtures"
+    if not fixtures_dir.is_dir():
+        yield
+        return
+    repros = sorted(p for p in fixtures_dir.iterdir() if p.is_file() and p.stem == "repro")
+    fixes = sorted(p for p in fixtures_dir.iterdir() if p.is_file() and p.stem == "fix")
+    if len(repros) != 1 or len(fixes) != 1:
+        yield
+        return
+    repro = repros[0]
+    fix = fixes[0]
+    original = repro.read_bytes()
+    try:
+        repro.write_bytes(fix.read_bytes())
+        yield
+    finally:
+        repro.write_bytes(original)
 
 
 def verify_artifact_on_disk(pytest_path: Path, settings: Settings) -> VerificationResult:
