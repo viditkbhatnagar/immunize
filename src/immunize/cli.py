@@ -11,10 +11,10 @@ from rich.table import Table
 
 from immunize import capture, inject, storage, verify
 from immunize.capture import CapturePayloadError
-from immunize.config import ConfigError, build_client, load_settings
-from immunize.diagnose import DiagnoseError, diagnose
-from immunize.generate import GenerateError, generate_all
-from immunize.models import CapturePayload, GeneratedArtifacts, Settings, Source
+from immunize.config import load_settings
+from immunize.models import CapturePayload, Source
+
+_VALID_SOURCES: tuple[Source, ...] = ("claude-code-hook", "shell-wrapper", "manual")
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -44,92 +44,49 @@ _STDIN_PLAIN_OPT = typer.Option(
 _DRY_RUN_OPT = typer.Option(
     False,
     "--dry-run",
-    help="Run diagnose/generate/verify; skip inject and artifact DB row.",
+    help="Parse and persist the payload without matching. (Matcher lands in Step 6.)",
 )
 
 
 @app.command("capture")
 def capture_cmd(
-    source: Source = _SOURCE_OPT,
+    source: str = _SOURCE_OPT,
     stdin_plain: bool = _STDIN_PLAIN_OPT,
-    dry_run: bool = _DRY_RUN_OPT,
+    dry_run: bool = _DRY_RUN_OPT,  # noqa: ARG001 -- retained until Step 6 rewires orchestration
 ) -> None:
-    """Capture a runtime error, diagnose it, generate artifacts, verify, and inject.
+    """Capture a runtime error and persist it. Matcher wiring lands in Step 6.
 
-    Worst case per capture: 2 × (2 diagnose + 1 skill + 1 pytest_gen) = up to 8 Claude API calls.
     Always exits 0 so the parent shell/hook is never blocked.
     """
     project_dir = Path.cwd()
     try:
+        if source not in _VALID_SOURCES:
+            console_err.print(
+                f"[red]immunize: invalid --source {source!r}; "
+                f"expected one of {_VALID_SOURCES}[/red]"
+            )
+            return
         settings = load_settings()
         project_dir = settings.project_dir
-        _capture_impl(settings, source=source, stdin_plain=stdin_plain, dry_run=dry_run)
+        conn = storage.connect(settings.state_db_path)
+        payload = _read_payload(
+            stdin_plain=stdin_plain, source=source, cwd=settings.project_dir  # type: ignore[arg-type]
+        )
+        capture.persist(conn, payload)
+        console_err.print(
+            "[dim]immunize: captured — matcher wiring lands in Step 6.[/dim]"
+        )
     except CapturePayloadError as e:
         console_err.print(f"[red]immunize: invalid capture payload[/red]\n{e}")
         console_err.print(
             "[yellow]Expected a JSON object matching CapturePayload "
             "(keys: source, stderr, exit_code, cwd, timestamp, project_fingerprint).[/yellow]"
         )
-    except ConfigError as e:
-        console_err.print(f"[red]immunize: {e}[/red]")
     except typer.Exit:
         raise
     except Exception as e:  # noqa: BLE001 -- intentional: capture must never raise
         console_err.print(f"[red]immunize: unexpected error: {e}[/red]")
         _append_error_log(project_dir, e)
-
-
-def _capture_impl(
-    settings: Settings, *, source: Source, stdin_plain: bool, dry_run: bool
-) -> None:
-    conn = storage.connect(settings.state_db_path)
-    payload = _read_payload(stdin_plain=stdin_plain, source=source, cwd=settings.project_dir)
-    error_id = capture.persist(conn, payload)
-
-    api = build_client(settings)
-    console_err.print("[dim]immunize: diagnosing...[/dim]")
-    diagnosis = diagnose(payload, settings, client=api)
-    diag_id = storage.insert_diagnosis(conn, error_id, diagnosis, settings.model)
-
-    if not diagnosis.is_generalizable:
-        console_err.print("[yellow]immunize: error marked not generalizable — skipping.[/yellow]")
-        storage.insert_rejection(conn, diag_id, "not_generalizable")
-        return
-
-    console_err.print("[dim]immunize: generating artifacts...[/dim]")
-    artifacts = generate_all(diagnosis, payload, settings, client=api)
-    console_err.print("[dim]immunize: verifying...[/dim]")
-    verification = verify.verify(artifacts, settings)
-
-    if not verification.passed:
-        console_err.print(
-            "[yellow]immunize: verification failed "
-            f"({verification.error_message}) — retrying once.[/yellow]"
-        )
-        diagnosis = diagnose(payload, settings, client=api)
-        diag_id = storage.insert_diagnosis(conn, error_id, diagnosis, settings.model)
-        artifacts = generate_all(diagnosis, payload, settings, client=api)
-        verification = verify.verify(artifacts, settings)
-
-    if not verification.passed:
-        rejected = verify.write_rejection_dump(
-            settings.project_dir / ".immunize" / "rejected", artifacts, verification
-        )
-        storage.insert_rejection(conn, diag_id, f"verify_failed: {verification.error_message}")
-        console_err.print(
-            f"[red]immunize: artifact rejected after retry.[/red]\n"
-            f"  Reason: {verification.error_message}\n"
-            f"  Dump:   {rejected}"
-        )
-        return
-
-    if dry_run:
-        _print_dry_run_summary(diagnosis, artifacts, settings.project_dir)
-        return
-
-    paths = inject.inject(artifacts, diagnosis, payload, conn=conn)
-    storage.insert_artifact(conn, diag_id, paths.slug, paths.as_db_dict(), verified=True)
-    _print_success_summary(diagnosis, paths, settings.project_dir)
 
 
 # --- list -------------------------------------------------------------------
@@ -248,45 +205,6 @@ def _read_payload(*, stdin_plain: bool, source: Source, cwd: Path) -> CapturePay
     return payload
 
 
-def _print_dry_run_summary(
-    diagnosis: object, artifacts: GeneratedArtifacts, project_dir: Path
-) -> None:
-    console_out.print(
-        "[yellow]--dry-run:[/yellow] verification passed; would inject these files:"
-    )
-    slug = getattr(diagnosis, "slug", "unknown")
-    skill_p = project_dir / ".claude" / "skills" / f"immunize-{slug}" / "SKILL.md"
-    console_out.print(f"  SKILL.md   → {skill_p}")
-    console_out.print(f"  Cursor     → {project_dir / '.cursor' / 'rules' / f'{slug}.mdc'}")
-    test_name = f"test_{slug.replace('-', '_')}.py"
-    console_out.print(f"  pytest     → {project_dir / 'tests' / 'immunized' / test_name}")
-    if artifacts.semgrep_yaml:
-        console_out.print(f"  Semgrep    → {project_dir / '.semgrep' / f'{slug}.yml'}")
-
-
-def _print_success_summary(
-    diagnosis: object, paths: inject.InjectedPaths, project_dir: Path
-) -> None:
-    table = Table(title="Immunity created", show_header=False)
-    table.add_column("Field")
-    table.add_column("Value")
-    table.add_row("Slug", paths.slug)
-    table.add_row("Error class", getattr(diagnosis, "error_class", ""))
-    table.add_row("SKILL.md", _rel(paths.skill_path, project_dir))
-    table.add_row("Cursor rule", _rel(paths.cursor_rule_path, project_dir))
-    table.add_row("pytest test", _rel(paths.pytest_path, project_dir))
-    if paths.semgrep_path:
-        table.add_row("Semgrep rule", _rel(paths.semgrep_path, project_dir))
-    console_out.print(table)
-
-
-def _rel(path: Path, base: Path) -> str:
-    try:
-        return str(path.relative_to(base))
-    except ValueError:
-        return str(path)
-
-
 def _append_error_log(project_dir: Path, exc: BaseException) -> None:
     log_dir = project_dir / ".immunize"
     try:
@@ -298,9 +216,4 @@ def _append_error_log(project_dir: Path, exc: BaseException) -> None:
         pass
 
 
-# Silence "unused import" for re-exports tests may want.
-__all__ = [
-    "app",
-    "DiagnoseError",
-    "GenerateError",
-]
+__all__ = ["app"]

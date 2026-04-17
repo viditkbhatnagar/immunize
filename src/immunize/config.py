@@ -9,13 +9,7 @@ try:
 except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
-import anthropic
-
 from immunize.models import Settings
-
-
-class ConfigError(Exception):
-    """Raised for configuration errors the user can fix without a traceback."""
 
 
 DEFAULTS: dict[str, Any] = {
@@ -44,16 +38,6 @@ def load_settings(
     merged["project_dir"] = project_dir
     merged["state_db_path"] = state_db_path
     return Settings(**merged)
-
-
-def build_client(settings: Settings) -> anthropic.Anthropic:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ConfigError(
-            "ANTHROPIC_API_KEY is not set. "
-            "Run: export ANTHROPIC_API_KEY=sk-... "
-            "— get a key at https://console.anthropic.com/"
-        )
-    return anthropic.Anthropic()
 
 
 def _user_config_path() -> Path:

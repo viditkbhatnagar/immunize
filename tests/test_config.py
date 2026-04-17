@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from immunize.config import ConfigError, build_client, load_settings
+from immunize.config import load_settings
 
 
 @pytest.fixture(autouse=True)
@@ -83,19 +83,3 @@ def test_nested_toml_keys(tmp_path: Path) -> None:
     assert settings.verify_retry_count == 3
 
 
-def test_build_client_raises_when_key_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    settings = load_settings(cwd=tmp_path)
-    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY is not set"):
-        build_client(settings)
-
-
-def test_build_client_constructs_when_key_present(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-fake")
-    settings = load_settings(cwd=tmp_path)
-    client = build_client(settings)
-    assert client is not None
