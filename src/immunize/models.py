@@ -85,12 +85,24 @@ class GeneratedArtifacts(BaseModel):
 
 
 class VerificationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # extra="ignore" (not "forbid") keeps backward-compat with the pre-6d
+    # call-sites that passed fails_without_fix / passes_with_fix explicitly;
+    # those are now derived from `passed` via the properties below. The
+    # authoring-time dual-run semantics live in `scripts/pattern_lint.py`.
+    model_config = ConfigDict(extra="ignore")
 
     passed: bool
-    fails_without_fix: bool
-    passes_with_fix: bool
     error_message: str | None = None
+
+    @property
+    def fails_without_fix(self) -> bool:
+        """DEPRECATED: mirrors `passed`. Dual-run semantics moved to pattern_lint."""
+        return self.passed
+
+    @property
+    def passes_with_fix(self) -> bool:
+        """DEPRECATED: mirrors `passed`. Dual-run semantics moved to pattern_lint."""
+        return self.passed
 
 
 class Settings(BaseModel):
