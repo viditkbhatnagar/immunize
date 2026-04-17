@@ -62,9 +62,7 @@ _LANGUAGE_SIGNATURES: dict[str, list[re.Pattern[str]]] = {
 _COMPILED_RULES: dict[str, tuple[list[re.Pattern[str]], list[re.Pattern[str]]]] = {}
 
 
-def load_patterns(
-    bundled_dir: Path, local_dir: Path | None = None
-) -> list[Pattern]:
+def load_patterns(bundled_dir: Path, local_dir: Path | None = None) -> list[Pattern]:
     """Load all bundled and local patterns from disk.
 
     Bundled patterns come from ``bundled_dir/<slug>/pattern.yaml``. Local
@@ -76,7 +74,11 @@ def load_patterns(
     Malformed pattern.yaml files are logged to stderr via Rich and
     skipped; one bad pattern never aborts the load.
     """
-    console_err = Console(stderr=True)
+    # soft_wrap=True disables Rich's column-width truncation so pattern
+    # paths and identifiers always render in full — CI runners have
+    # narrow default terminal widths and were truncating path names,
+    # making the warning messages ambiguous.
+    console_err = Console(stderr=True, soft_wrap=True)
     bundled = _load_from_dir(bundled_dir, console_err)
     local = _load_from_dir(local_dir, console_err) if local_dir is not None else []
 
