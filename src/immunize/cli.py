@@ -5,6 +5,8 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+from typing import get_args
+
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -14,7 +16,10 @@ from immunize.capture import CapturePayloadError
 from immunize.config import load_settings
 from immunize.models import CapturePayload, Source
 
-_VALID_SOURCES: tuple[Source, ...] = ("claude-code-hook", "shell-wrapper", "manual")
+# Single source of truth: the Source Literal in models.py. get_args resolves
+# to the tuple of member strings at runtime; frozenset gives us O(1) membership
+# tests against arbitrary user input from --source.
+_VALID_SOURCES: frozenset[str] = frozenset(get_args(Source))
 
 app = typer.Typer(
     no_args_is_help=True,
