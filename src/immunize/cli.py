@@ -4,7 +4,6 @@ import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-
 from typing import get_args
 
 import typer
