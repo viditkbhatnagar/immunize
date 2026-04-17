@@ -76,10 +76,38 @@ def test_env_overrides_project_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_nested_toml_keys(tmp_path: Path) -> None:
     project = tmp_path / ".immunize" / "config.toml"
     project.parent.mkdir(parents=True, exist_ok=True)
-    project.write_text('[generate]\nsemgrep = true\n[verify]\nretry_count = 3\n')
+    project.write_text("[generate]\nsemgrep = true\n[verify]\nretry_count = 3\n")
 
     settings = load_settings(cwd=tmp_path)
     assert settings.generate_semgrep is True
     assert settings.verify_retry_count == 3
 
 
+def test_defaults_populate_local_patterns_dir_from_cwd(tmp_path: Path) -> None:
+    settings = load_settings(cwd=tmp_path)
+    assert settings.min_match_confidence == 0.70
+    assert settings.local_patterns_dir == tmp_path.resolve() / ".immunize" / "patterns_local"
+
+
+def test_env_overrides_min_match_confidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("IMMUNIZE_MIN_MATCH_CONFIDENCE", "0.85")
+    settings = load_settings(cwd=tmp_path)
+    assert settings.min_match_confidence == 0.85
+
+
+def test_env_overrides_local_patterns_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    custom = tmp_path / "custom_patterns"
+    monkeypatch.setenv("IMMUNIZE_LOCAL_PATTERNS_DIR", str(custom))
+    settings = load_settings(cwd=tmp_path)
+    assert settings.local_patterns_dir == custom
+
+
+def test_toml_match_section(tmp_path: Path) -> None:
+    project = tmp_path / ".immunize" / "config.toml"
+    project.parent.mkdir(parents=True, exist_ok=True)
+    project.write_text("[match]\nmin_confidence = 0.90\n")
+
+    settings = load_settings(cwd=tmp_path)
+    assert settings.min_match_confidence == 0.90

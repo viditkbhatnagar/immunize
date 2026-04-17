@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ErrorClass = Literal[
     "cors",
@@ -102,6 +102,14 @@ class Settings(BaseModel):
     verify_retry_count: int = 1
     project_dir: Path
     state_db_path: Path
+    min_match_confidence: float = Field(default=0.70, ge=0.0, le=1.0)
+    local_patterns_dir: Path | None = None
+
+    @model_validator(mode="after")
+    def _fill_local_patterns_dir(self) -> Settings:
+        if self.local_patterns_dir is None:
+            self.local_patterns_dir = self.project_dir / ".immunize" / "patterns_local"
+        return self
 
 
 # --- Pattern library models (Phase 1B) --------------------------------------

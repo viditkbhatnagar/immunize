@@ -113,6 +113,39 @@ def test_settings_defaults_keep_semgrep_off(tmp_path: Path) -> None:
     assert settings.model == "claude-sonnet-4-6"
     assert settings.verify_timeout_seconds == 30
     assert settings.verify_retry_count == 1
+    assert settings.min_match_confidence == 0.70
+    assert settings.local_patterns_dir == tmp_path / ".immunize" / "patterns_local"
+
+
+def test_settings_local_patterns_dir_explicit_override(tmp_path: Path) -> None:
+    custom = tmp_path / "custom_patterns"
+    settings = Settings(
+        project_dir=tmp_path,
+        state_db_path=tmp_path / ".immunize/state.db",
+        local_patterns_dir=custom,
+    )
+    assert settings.local_patterns_dir == custom
+
+
+@pytest.mark.parametrize("value", [-0.01, 1.01, 2.0, -1.0])
+def test_settings_min_match_confidence_out_of_range(tmp_path: Path, value: float) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            project_dir=tmp_path,
+            state_db_path=tmp_path / ".immunize/state.db",
+            min_match_confidence=value,
+        )
+
+
+def test_settings_forbids_extras(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "project_dir": str(tmp_path),
+                "state_db_path": str(tmp_path / ".immunize/state.db"),
+                "bonus_field": True,
+            }
+        )
 
 
 def _diag_kwargs(**overrides: object) -> dict:
