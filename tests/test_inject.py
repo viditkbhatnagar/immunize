@@ -278,3 +278,126 @@ def test_injected_pytest_reads_fixtures_in_project_tree(
     ns: dict = {"__file__": str(paths.pytest_path)}
     exec(paths.pytest_path.read_text(), ns)
     ns["test_fixture_readable"]()
+
+
+# ---- 6g: injected repro.* slot carries fix.* bytes -------------------------
+def _write_pattern_with_repro_fix_pair(root: Path, slug: str) -> tuple[Pattern, bytes, bytes]:
+    """Create a pattern whose test_template.py reads fixtures/repro.jsx and
+    asserts a 'FIXED' marker is present. repro.jsx ships BAD bytes; fix.jsx
+    ships GOOD bytes. Inject must write fix bytes to the repro slot."""
+    import importlib
+
+    pattern_dir = root / slug
+    pattern_dir.mkdir(parents=True, exist_ok=True)
+    (pattern_dir / "SKILL.md").write_text(f"---\nname: immunize-{slug}\ndescription: d\n---\n\nx\n")
+    (pattern_dir / "cursor_rule.mdc").write_text(
+        "---\ndescription: d\nglobs: '**/*.jsx'\nalwaysApply: false\n---\n\nrule\n"
+    )
+    (pattern_dir / "test_template.py").write_text(
+        "from pathlib import Path\n\n"
+        "def test_repro_has_fix_marker() -> None:\n"
+        "    src = (Path(__file__).parent / 'fixtures' / 'repro.jsx').read_text()\n"
+        "    assert 'FIXED' in src, f'expected FIXED marker, got: {src!r}'\n"
+    )
+    fixtures = pattern_dir / "fixtures"
+    fixtures.mkdir(exist_ok=True)
+    bad_bytes = b"const x = 'BUGGY';\n"
+    good_bytes = b"const x = 'FIXED';\n"
+    (fixtures / "repro.jsx").write_bytes(bad_bytes)
+    (fixtures / "fix.jsx").write_bytes(good_bytes)
+
+    importlib.invalidate_caches()  # belt-and-braces; not strictly needed here
+    pattern = Pattern.model_validate(
+        {
+            "id": slug,
+            "version": 1,
+            "author": "@test",
+            "origin": "bundled",
+            "error_class": "other",
+            "languages": ["javascript"],
+            "description": "repro/fix rewrite test",
+            "match": {"stderr_patterns": ["boom"], "min_confidence": 0.70},
+            "verification": {"pytest_relative_path": "test_template.py"},
+            "directory": pattern_dir,
+        }
+    )
+    return pattern, bad_bytes, good_bytes
+
+
+def test_inject_rewrites_repro_bytes_to_fix_bytes(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    patterns_dir = tmp_path / "patterns"
+    project_dir = tmp_path / "project"
+    pattern, bad_bytes, good_bytes = _write_pattern_with_repro_fix_pair(patterns_dir, "rewrite-me")
+
+    paths = inject.inject(pattern, project_dir=project_dir, conn=conn)
+
+    injected_repro = paths.pytest_dir / "fixtures" / "repro.jsx"
+    injected_fix = paths.pytest_dir / "fixtures" / "fix.jsx"
+    assert injected_repro.read_bytes() == good_bytes, "repro slot must carry fix bytes"
+    assert injected_fix.read_bytes() == good_bytes, "fix slot must carry fix bytes"
+
+    # Pattern's source tree is untouched — pattern_lint still owns the swap.
+    assert (pattern.directory / "fixtures" / "repro.jsx").read_bytes() == bad_bytes
+    assert (pattern.directory / "fixtures" / "fix.jsx").read_bytes() == good_bytes
+
+
+def test_injected_guardrail_test_passes_in_user_pytest(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Run pytest on the injected test_template.py without any fixture
+    manipulation. It MUST pass. This is the ship-blocker guarantee from 6g."""
+    import subprocess
+    import sys
+
+    patterns_dir = tmp_path / "patterns"
+    project_dir = tmp_path / "project"
+    pattern, _, _ = _write_pattern_with_repro_fix_pair(patterns_dir, "user-ci")
+
+    paths = inject.inject(pattern, project_dir=project_dir, conn=conn)
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-x",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        str(paths.pytest_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    assert (
+        proc.returncode == 0
+    ), f"injected guardrail test must pass; stdout={proc.stdout!r} stderr={proc.stderr!r}"
+
+
+def test_inject_copies_repro_verbatim_when_no_fix_sibling(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Patterns with only a repro (no fix) fall through to verbatim copy —
+    the rewrite only fires on a matched repro+fix pair."""
+    pattern_dir = tmp_path / "patterns" / "only-repro"
+    pattern_dir.mkdir(parents=True)
+    (pattern_dir / "SKILL.md").write_text("---\nname: x\ndescription: d\n---\nx\n")
+    (pattern_dir / "cursor_rule.mdc").write_text(
+        "---\ndescription: d\nglobs: '**/*'\nalwaysApply: false\n---\nrule\n"
+    )
+    (pattern_dir / "test_template.py").write_text("def test_x(): pass\n")
+    (pattern_dir / "fixtures").mkdir()
+    (pattern_dir / "fixtures" / "repro.txt").write_bytes(b"verbatim\n")
+
+    pattern = Pattern.model_validate(
+        {
+            "id": "only-repro",
+            "version": 1,
+            "author": "@t",
+            "origin": "bundled",
+            "error_class": "other",
+            "languages": ["python"],
+            "description": "no-fix pattern",
+            "match": {"stderr_patterns": ["x"]},
+            "verification": {"pytest_relative_path": "test_template.py"},
+            "directory": pattern_dir,
+        }
+    )
+    paths = inject.inject(pattern, project_dir=tmp_path / "project", conn=conn)
+    assert (paths.pytest_dir / "fixtures" / "repro.txt").read_bytes() == b"verbatim\n"

@@ -76,7 +76,7 @@ def inject(
     _atomic_write_text(paths.pytest_dir / "__init__.py", "")
 
     if fixtures_src.is_dir():
-        _copy_tree(fixtures_src, paths.pytest_dir / "fixtures")
+        _copy_fixtures_with_repro_rewrite(fixtures_src, paths.pytest_dir / "fixtures")
 
     if paths.semgrep_path is not None:
         _atomic_write_bytes(paths.semgrep_path, semgrep_src.read_bytes())
@@ -174,5 +174,42 @@ def _copy_tree(src: Path, dst: Path) -> None:
         target = dst / entry.name
         if entry.is_dir():
             _copy_tree(entry, target)
+        else:
+            _atomic_write_bytes(target, entry.read_bytes())
+
+
+def _copy_fixtures_with_repro_rewrite(src: Path, dst: Path) -> None:
+    """Copy a pattern's fixtures/ subtree into the user's project, but when
+    the pattern ships a `repro.<ext>` + `fix.<ext>` pair at the top level,
+    write the `fix.<ext>` bytes into the injected `repro.<ext>` slot.
+
+    Why: `test_template.py` resolves its fixture via
+    `Path(__file__).parent / "fixtures" / "repro.<ext>"`. If we copied the
+    pattern's repro bytes verbatim, the injected guardrail test would FAIL
+    in the user's own pytest run — the repro is the buggy example, by
+    authoring convention. Writing fix bytes into the repro path keeps the
+    test's path expression unchanged while making it a passing regression
+    test. If an AI later replaces the fix bytes with buggy bytes, the test
+    fails and catches the regression.
+
+    The pattern's source-tree `repro.*` stays intact (scripts/pattern_lint.py
+    still exercises the full FAIL→PASS→FAIL swap at authoring time).
+    """
+    dst.mkdir(parents=True, exist_ok=True)
+    top_level = [p for p in src.iterdir() if p.is_file() and p.name != "__pycache__"]
+    repros = sorted(p for p in top_level if p.stem == "repro")
+    fixes = sorted(p for p in top_level if p.stem == "fix")
+    fix_bytes: bytes | None = None
+    if len(repros) == 1 and len(fixes) == 1:
+        fix_bytes = fixes[0].read_bytes()
+
+    for entry in src.iterdir():
+        if entry.name == "__pycache__":
+            continue
+        target = dst / entry.name
+        if entry.is_dir():
+            _copy_tree(entry, target)
+        elif fix_bytes is not None and entry.stem == "repro":
+            _atomic_write_bytes(target, fix_bytes)
         else:
             _atomic_write_bytes(target, entry.read_bytes())

@@ -354,6 +354,34 @@ This double-gating is why "verified" is meaningful. It's not just "we wrote a te
 
 ## Flow diagrams
 
+### Inject-time fixture rewrite (the "fix-into-repro" swap)
+
+Each bundled pattern ships two fixture files:
+
+- `fixtures/repro.<ext>` — the BUGGY example. `test_template.py` is authored
+  to **FAIL** when run against this file. `scripts/pattern_lint.py` relies
+  on that failure for the first leg of its FAIL→PASS→FAIL authoring-time
+  dual-run.
+- `fixtures/fix.<ext>` — the FIXED example. Same API surface, correct
+  behavior. Swapping its bytes over `repro.<ext>` makes the test PASS.
+
+At **inject time**, `inject.py` writes the `fix.<ext>` bytes into the
+user's `tests/immunized/<slug>/fixtures/repro.<ext>` slot. `test_template.py`
+resolves its fixture via `Path(__file__).parent / "fixtures" / "repro.<ext>"`
+— the filename must stay as authored, but the contents need to be the
+correct example so the injected test passes in the user's pytest run.
+
+Result: a user who runs `pytest tests/immunized/` after injection gets a
+green guardrail test. If an AI assistant later rewrites the fix bytes
+with buggy bytes (regression), the test fails and catches it. The
+pattern's source tree under `src/immunize/patterns/` is untouched —
+`pattern_lint.py` still has the original repro bytes available for its
+dual-run.
+
+The rewrite only fires when a pattern ships exactly one `repro.*` and one
+`fix.*` at the top of `fixtures/`. Minimal patterns (no repro+fix pair)
+fall through to a verbatim copy.
+
 ### User-runtime happy path (bundled match)
 
 ```
