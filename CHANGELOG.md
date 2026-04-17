@@ -7,18 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] — TBD
+
+First real release. `immunize` ships as a deterministic, offline pattern
+library that stops AI coding assistants from repeating common runtime
+errors. No API key required at user-runtime.
+
 ### Added
-- Real `pyproject.toml` replacing the name-reservation placeholder: hatchling backend, Python 3.10+, real dependency set (typer, rich, anthropic, pydantic, pyyaml), dev extras (pytest, pytest-mock, ruff, build, twine), `immunize` console script entry point, ruff and pytest configuration.
-- Apache-2.0 `LICENSE` with 2026 copyright.
-- `README.md` describing the project, status, and planned install flow; links to the planning documents.
-- `.gitignore` covering virtualenvs, caches, build output, local `.immunize/` state, and `.env` files.
-- Empty project layout under `src/immunize/` (including `generate/` and `skill_assets/immunize-manager/`), `hooks/`, `tests/fixtures/`, and `docs/`, per `_planning/SPEC.md`.
-- Smoke test at `tests/test_smoke.py` so CI runs a real assertion until Phase 1 delivers real tests.
-- `.github/workflows/ci.yml` — ruff and pytest on every push and pull request across Python 3.10, 3.11, and 3.12.
-- `.github/workflows/release.yml` — PyPI publish on `v*` tags via trusted publishing.
-- `CONTRIBUTING.md` covering setup, common tasks, issue and PR guidance, and release discipline.
-- `CHANGELOG.md` (this file).
-- `Makefile` with `install`, `test`, `lint`, `format`, `build`, `clean` targets.
+- Deterministic pattern matcher (`src/immunize/matcher.py`) — regex + error-class
+  heuristics; no runtime LLM calls, no API key required.
+- 7 bundled patterns covering common AI-coding runtime errors:
+  `react-hook-missing-dep`, `fetch-missing-credentials`,
+  `python-none-attribute-access`, `import-not-found-python`,
+  `missing-env-var`, `rate-limit-no-backoff`,
+  `async-fn-called-without-await`.
+- `immunize capture` — matches → verifies (pytest subprocess) → injects
+  a Claude Code skill, a Cursor rule, and a pytest regression test into
+  the caller's repo. Atomic per-file replace.
+- `immunize list` / `immunize verify` / `immunize remove` — manage
+  installed immunities.
+- `immunize install-skill` — installs the bundled `immunize-manager`
+  Claude Code skill into `<project>/.claude/skills/immunize-manager/`.
+- `immunize author-pattern` — contributor-only CLI that uses the
+  Anthropic API to draft new patterns from a `CapturePayload` JSON;
+  verification runs before save. Requires `ANTHROPIC_API_KEY`; end
+  users never do. The `anthropic` import is lazy, scoped to this
+  command only — the `capture`, `list`, `verify`, and `remove` code
+  paths never touch the SDK.
+- Bundled `immunize-manager` skill teaches Claude Code when and how to
+  invoke `immunize` on failing commands.
+- `scripts/pattern_lint.py` CI gate — every bundled pattern must pass
+  `pytest` and YAML shape checks or the build fails.
+- End-to-end integration test (`tests/test_e2e_capture.py`) proving
+  capture → match → verify → inject on a real bundled pattern with
+  no network.
+
+### Changed
+- Pivoted from the original LLM-at-runtime design. The previous
+  architecture lives on the `phase1-llm-runtime-archive` branch for
+  reference. See [_planning/PLAN_1B.md](./_planning/PLAN_1B.md) for the
+  full rationale.
+
+### Removed
+- `diagnose.py`, `generate/skill.py`, `generate/pytest_gen.py`,
+  `generate/semgrep.py`, and the `Diagnosis` / `GeneratedArtifacts` /
+  `ErrorClass` models. Runtime LLM calls were replaced by the
+  deterministic pattern library.
+
+### Known limitations
+- POSIX-only. Windows support planned for v0.2+.
+- Verification runner is Python pytest for every pattern — JS/TS
+  patterns verify via regex source scanning rather than native test
+  runners. Native runners (Jest, Go test, cargo test) are a v0.3 goal.
+- No community pattern registry; patterns ship in the package and new
+  ones land via `pip install --upgrade immunize`.
 
 ## [0.0.1] — 2026-04-17
 
