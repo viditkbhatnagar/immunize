@@ -1,0 +1,63 @@
+---
+description: When calling HTTP APIs from Python, retry 429 responses with bounded exponential backoff instead of crashing on the first rate-limit.
+globs: **/*.py
+alwaysApply: false
+---
+
+HTTP APIs return 429 when the caller is rate-limited. Code that
+ignores the status and calls `raise_for_status()` immediately crashes
+the whole script on the first throttle — even though a second attempt
+a few seconds later would almost always succeed:
+
+    requests.exceptions.HTTPError: 429 Client Error: Too Many Requests
+
+## Example
+
+Wrong — happy-path only; dies on the first 429:
+
+```python
+def fetch_user(client, user_id):
+    resp = client.get(f"/users/{user_id}")
+    resp.raise_for_status()
+    return resp.json()
+```
+
+Right — bounded retry with exponential backoff on 429:
+
+```python
+import time
+
+def fetch_user(client, user_id, max_attempts=4):
+    resp = None
+    for attempt in range(max_attempts):
+        resp = client.get(f"/users/{user_id}")
+        if resp.status_code != 429:
+            break
+        time.sleep(2 ** attempt)
+    resp.raise_for_status()
+    return resp.json()
+```
+
+## Respect Retry-After when present
+
+If the server returns a `Retry-After` header (seconds or HTTP date),
+honor it instead of your own schedule:
+
+```python
+wait = int(resp.headers.get("Retry-After", 2 ** attempt))
+time.sleep(wait)
+```
+
+## Cap total wait
+
+Never let a backoff loop sleep indefinitely. A bounded attempt count
+(3–5) plus a ceiling on the delay (e.g. 30 s) keeps a slow upstream
+from freezing the caller's process forever.
+
+## Prefer a real HTTP client retry feature
+
+`requests.adapters.HTTPAdapter(max_retries=...)`, `urllib3.Retry`,
+and `httpx.Client(transport=...)` all support retry policies that
+cover 429 plus 5xx correctly. Reach for those before rolling your
+own loop — they handle jitter, connection failures, and Retry-After
+out of the box.

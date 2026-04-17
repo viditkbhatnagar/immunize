@@ -23,6 +23,7 @@ EXPECTED_IDS = {
     "python-none-attribute-access",
     "import-not-found-python",
     "missing-env-var",
+    "rate-limit-no-backoff",
 }
 
 
