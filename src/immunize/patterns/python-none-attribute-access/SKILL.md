@@ -1,0 +1,52 @@
+---
+name: immunize-python-none-attribute-access
+description: Use when writing Python that calls a function returning an Optional value (e.g., dict.get, re.search) before accessing attributes on the result.
+---
+
+# python-none-attribute-access
+
+Before dereferencing an Optional, check for None. `dict.get(key)` returns
+`None` when the key is missing; `re.search(...)` returns `None` on no
+match; many ORMs return `None` for "not found." Accessing any attribute
+on that `None` raises:
+
+    AttributeError: 'NoneType' object has no attribute '...'
+
+Type checkers flag this, but runtime code often slips through — the
+AttributeError only surfaces on the unlucky input.
+
+## Example
+
+Wrong — crashes when `user_id` is not in the registry:
+
+```python
+def lookup_display_name(registry: dict[str, User], user_id: str) -> str:
+    user = registry.get(user_id)
+    return user.name
+```
+
+Right — handle the None case explicitly:
+
+```python
+def lookup_display_name(registry: dict[str, User], user_id: str) -> str:
+    user = registry.get(user_id)
+    if user is None:
+        return "unknown"
+    return user.name
+```
+
+## Don't catch AttributeError
+
+Wrapping the access in `try: ... except AttributeError:` hides real
+bugs — a typo in an attribute name becomes silent. The correct fix is
+an explicit None check, a sentinel default, or failing fast with a
+clearer error.
+
+## Sentinel alternatives
+
+- `dict.get(key, default)` — pass a fallback directly.
+- `if key not in registry:` — fail fast with a specific error message.
+- `registry.setdefault(key, default_user)` — ensure the slot exists.
+
+Pick the option whose semantics match what the caller expects to see
+when the value is missing.
