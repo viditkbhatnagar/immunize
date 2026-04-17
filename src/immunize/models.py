@@ -7,26 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ErrorClass = Literal[
-    "cors",
-    "import",
-    "auth",
-    "rate_limit",
-    "type_error",
-    "null_ref",
-    "config",
-    "network",
-    "other",
-]
-
 Source = Literal["claude-code-hook", "shell-wrapper", "manual"]
 
 _SLUG_RE = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
-
-# DEPRECATED pending pivot: Diagnosis, GeneratedArtifacts, ErrorClass
-# These models are scheduled for deletion once their consumers (storage, inject,
-# verify, cursor_rule) are rewired to use Pattern / MatchResult in Steps 3-6.
-# Do not add new callers of these models.
 
 
 class CapturePayload(BaseModel):
@@ -44,44 +27,6 @@ class CapturePayload(BaseModel):
     timestamp: datetime
     project_fingerprint: str
     session_id: str | None = None
-
-
-class Diagnosis(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    root_cause: str
-    error_class: ErrorClass
-    is_generalizable: bool
-    canonical_description: str
-    fix_summary: str
-    language: str
-    slug: str
-    semgrep_applicable: bool
-
-    @field_validator("slug")
-    @classmethod
-    def _validate_slug(cls, v: str) -> str:
-        if not _SLUG_RE.fullmatch(v):
-            raise ValueError("slug must be kebab-case (lowercase letters, digits, hyphens)")
-        if len(v) > 40:
-            raise ValueError("slug must be <= 40 chars")
-        return v
-
-    @field_validator("language")
-    @classmethod
-    def _normalize_language(cls, v: str) -> str:
-        return v.strip().lower()
-
-
-class GeneratedArtifacts(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    skill_md: str
-    cursor_rule: str
-    semgrep_yaml: str | None = None
-    pytest_code: str
-    expected_fix_snippet: str
-    error_repro_snippet: str
 
 
 class VerificationResult(BaseModel):

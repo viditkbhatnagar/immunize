@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from immunize.models import CapturePayload, Diagnosis
+from immunize.models import CapturePayload
 
 # The `diagnoses` table is left in place for backward compatibility with
 # pre-Phase-1B databases; no code path writes to it after step 6e. The
@@ -133,52 +133,6 @@ def insert_error(conn: sqlite3.Connection, payload: CapturePayload) -> int:
     cursor = conn.execute(
         "INSERT INTO errors (payload_json, captured_at, project_fingerprint) VALUES (?, ?, ?)",
         (payload.model_dump_json(), _now(), payload.project_fingerprint),
-    )
-    conn.commit()
-    return cursor.lastrowid or 0
-
-
-# DEPRECATED: slated for deletion in step 6e. No code path writes to the
-# diagnoses table after the Phase 1B pivot. Kept here so the tests that
-# still exercise the legacy shape pass until 6e prunes them.
-def insert_diagnosis(
-    conn: sqlite3.Connection, error_id: int, diagnosis: Diagnosis, model: str
-) -> int:
-    cursor = conn.execute(
-        "INSERT INTO diagnoses (error_id, diagnosis_json, model, created_at) "
-        "VALUES (?, ?, ?, ?)",
-        (error_id, diagnosis.model_dump_json(), model, _now()),
-    )
-    conn.commit()
-    return cursor.lastrowid or 0
-
-
-# DEPRECATED: callers should use insert_match. Kept alive through step 6e
-# so legacy tests round-trip; the diagnoses FK is nullable.
-def insert_artifact(
-    conn: sqlite3.Connection,
-    diagnosis_id: int | None,
-    slug: str,
-    paths: dict[str, str | None],
-    verified: bool,
-) -> int:
-    cursor = conn.execute(
-        """
-        INSERT INTO artifacts
-          (diagnosis_id, slug, skill_path, cursor_rule_path,
-           semgrep_path, pytest_path, verified, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            diagnosis_id,
-            slug,
-            paths.get("skill_path"),
-            paths.get("cursor_rule_path"),
-            paths.get("semgrep_path"),
-            paths.get("pytest_path"),
-            1 if verified else 0,
-            _now(),
-        ),
     )
     conn.commit()
     return cursor.lastrowid or 0

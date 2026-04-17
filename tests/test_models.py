@@ -10,8 +10,6 @@ from pydantic import ValidationError
 from immunize.models import (
     AuthoringDraft,
     CapturePayload,
-    Diagnosis,
-    GeneratedArtifacts,
     MatchResult,
     MatchRules,
     Pattern,
@@ -43,68 +41,19 @@ def test_capture_payload_tolerates_extra_fields() -> None:
     assert not hasattr(payload, "future_claude_code_field")
 
 
-@pytest.mark.parametrize("slug", ["cors-missing-credentials", "abc", "a1-b2-c3"])
-def test_diagnosis_slug_valid(slug: str) -> None:
-    diag = _diag(slug=slug)
-    assert diag.slug == slug
-
-
-@pytest.mark.parametrize(
-    "slug",
-    ["Foo-bar", "foo_bar", "-leading", "trailing-", "a--b", "", "a" * 41],
-)
-def test_diagnosis_slug_invalid(slug: str) -> None:
-    with pytest.raises(ValidationError):
-        _diag(slug=slug)
-
-
-def test_diagnosis_accepts_network_error_class() -> None:
-    diag = _diag(error_class="network")
-    assert diag.error_class == "network"
-
-
-def test_diagnosis_rejects_unknown_error_class() -> None:
-    with pytest.raises(ValidationError):
-        _diag(error_class="teapot")
-
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        ("JavaScript", "javascript"),
-        ("  Python  ", "python"),
-        ("go", "go"),
-        ("TypeScript", "typescript"),
-    ],
-)
-def test_diagnosis_language_normalized(raw: str, expected: str) -> None:
-    assert _diag(language=raw).language == expected
-
-
-def test_diagnosis_forbids_extra_fields() -> None:
-    payload = _diag_kwargs()
-    payload["hallucinated_field"] = "oops"
-    with pytest.raises(ValidationError):
-        Diagnosis.model_validate(payload)
-
-
-def test_generated_artifacts_forbids_extras() -> None:
-    with pytest.raises(ValidationError):
-        GeneratedArtifacts.model_validate(
-            {
-                "skill_md": "a",
-                "cursor_rule": "b",
-                "pytest_code": "c",
-                "expected_fix_snippet": "d",
-                "error_repro_snippet": "e",
-                "bonus": "nope",
-            }
-        )
-
-
 def test_verification_result_defaults() -> None:
-    result = VerificationResult(passed=False, fails_without_fix=False, passes_with_fix=False)
+    result = VerificationResult(passed=False)
     assert result.error_message is None
+
+
+def test_verification_result_deprecated_aliases_mirror_passed() -> None:
+    """The pre-6d fails_without_fix / passes_with_fix fields are kept as
+    @property accessors returning `passed`, for backward compat with callers
+    that still read them."""
+    passed = VerificationResult(passed=True)
+    failed = VerificationResult(passed=False, error_message="nope")
+    assert passed.fails_without_fix is True and passed.passes_with_fix is True
+    assert failed.fails_without_fix is False and failed.passes_with_fix is False
 
 
 def test_settings_defaults_keep_semgrep_off(tmp_path: Path) -> None:
@@ -146,29 +95,6 @@ def test_settings_forbids_extras(tmp_path: Path) -> None:
                 "bonus_field": True,
             }
         )
-
-
-def _diag_kwargs(**overrides: object) -> dict:
-    base = {
-        "root_cause": "Missing credentials on CORS fetch.",
-        "error_class": "cors",
-        "is_generalizable": True,
-        "canonical_description": (
-            "Requests to authenticated cross-origin endpoints must set credentials: 'include'."
-        ),
-        "fix_summary": (
-            "Add credentials: 'include' on fetch and ensure server sends Allow-Credentials."
-        ),
-        "language": "typescript",
-        "slug": "cors-missing-credentials",
-        "semgrep_applicable": False,
-    }
-    base.update(overrides)
-    return base
-
-
-def _diag(**overrides: object) -> Diagnosis:
-    return Diagnosis.model_validate(_diag_kwargs(**overrides))
 
 
 # --- Pattern library models (Phase 1B step 2b) ------------------------------
