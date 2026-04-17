@@ -22,6 +22,7 @@ EXPECTED_IDS = {
     "fetch-missing-credentials",
     "python-none-attribute-access",
     "import-not-found-python",
+    "missing-env-var",
 }
 
 

@@ -1,0 +1,66 @@
+---
+description: When reading configuration from os.environ, check for missing values and raise a specific ConfigError with an actionable message instead of a raw KeyError.
+globs: **/*.py
+alwaysApply: false
+---
+
+`os.environ[...]` is dict-style indexing. Missing keys raise
+`KeyError` with no context — the traceback shows an indexing line,
+not a message about which variable was expected or why the program
+needs it. In production logs, this reads as a mystery crash:
+
+    KeyError: 'APP_API_KEY'
+      File "app/config.py", line 12, in get_api_key
+        return os.environ["APP_API_KEY"]
+
+## Example
+
+Wrong — opaque KeyError; caller has no idea what to fix:
+
+```python
+import os
+
+def get_api_key() -> str:
+    return os.environ["APP_API_KEY"]
+```
+
+Right — explicit check, specific error, actionable message:
+
+```python
+import os
+
+class ConfigError(Exception):
+    pass
+
+def get_api_key() -> str:
+    value = os.environ.get("APP_API_KEY")
+    if not value:
+        raise ConfigError(
+            "APP_API_KEY is not set. Export it before running."
+        )
+    return value
+```
+
+## Prefer failing at startup
+
+Read configuration once at process boot, not on every request. A
+missing key should surface before the first user hits the path:
+
+```python
+REQUIRED = ("APP_API_KEY", "APP_DB_URL")
+
+def load_config() -> dict[str, str]:
+    missing = [k for k in REQUIRED if not os.environ.get(k)]
+    if missing:
+        raise ConfigError(f"missing env vars: {', '.join(missing)}")
+    return {k: os.environ[k] for k in REQUIRED}
+```
+
+This turns a 500 during a user request into a crash at boot — loud,
+visible, and immediately fixable.
+
+## Treat empty strings as missing
+
+`.get()` returns the empty string if the var is exported but empty.
+Use `if not value:` rather than `if value is None:` — an empty
+string is almost never what you want for an API key or URL.
