@@ -11,7 +11,6 @@ except ModuleNotFoundError:  # Python 3.10
 
 from immunize.models import Settings
 
-
 DEFAULTS: dict[str, Any] = {
     "model": "claude-sonnet-4-6",
     "generate_semgrep": False,
