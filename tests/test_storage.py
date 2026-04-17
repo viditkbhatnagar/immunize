@@ -46,8 +46,7 @@ def test_init_schema_idempotent(conn: sqlite3.Connection) -> None:
     storage.init_schema(conn)
     storage.init_schema(conn)
     tables = {
-        row["name"]
-        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
     assert {"errors", "diagnoses", "artifacts", "rejections"} <= tables
 
@@ -148,3 +147,155 @@ def test_insert_rejection(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT * FROM rejections WHERE id = ?", (rej_id,)).fetchone()
     assert row["reason"] == "verify_failed_twice"
     assert row["diagnosis_id"] is None
+
+
+def test_insert_match_happy_path(conn: sqlite3.Connection) -> None:
+    artifact_id = storage.insert_match(
+        conn,
+        slug="fetch-missing-credentials",
+        pattern_id="fetch-missing-credentials",
+        pattern_origin="bundled",
+        paths={
+            "skill_path": ".claude/skills/immunize-fetch-missing-credentials/SKILL.md",
+            "cursor_rule_path": ".cursor/rules/fetch-missing-credentials.mdc",
+            "semgrep_path": None,
+            "pytest_path": "tests/immunized/fetch-missing-credentials/test_template.py",
+        },
+        verified=True,
+    )
+    fetched = storage.get_artifact(conn, artifact_id)
+    assert fetched is not None
+    assert fetched.diagnosis_id is None
+    assert fetched.pattern_id == "fetch-missing-credentials"
+    assert fetched.pattern_origin == "bundled"
+    assert fetched.slug == "fetch-missing-credentials"
+    assert fetched.verified is True
+    assert fetched.semgrep_path is None
+
+
+def test_list_artifacts_returns_pattern_fields(conn: sqlite3.Connection) -> None:
+    storage.insert_match(
+        conn,
+        slug="a",
+        pattern_id="pat-a",
+        pattern_origin="bundled",
+        paths={},
+        verified=True,
+    )
+    storage.insert_match(
+        conn,
+        slug="b",
+        pattern_id="pat-b",
+        pattern_origin="local",
+        paths={},
+        verified=False,
+    )
+    rows = storage.list_artifacts(conn)
+    assert [(r.slug, r.pattern_id, r.pattern_origin) for r in rows] == [
+        ("b", "pat-b", "local"),
+        ("a", "pat-a", "bundled"),
+    ]
+
+
+def test_migration_from_legacy_schema_adds_pattern_columns(tmp_path: Path) -> None:
+    """A DB created under the pre-6b schema must open cleanly and gain the
+    new pattern_id/pattern_origin columns with diagnosis_id becoming nullable."""
+    db_path = tmp_path / "legacy.db"
+    raw = sqlite3.connect(str(db_path))
+    raw.executescript(
+        """
+        CREATE TABLE errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            payload_json TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            project_fingerprint TEXT NOT NULL
+        );
+        CREATE TABLE diagnoses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            error_id INTEGER NOT NULL REFERENCES errors(id),
+            diagnosis_json TEXT NOT NULL,
+            model TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE artifacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            diagnosis_id INTEGER NOT NULL REFERENCES diagnoses(id),
+            slug TEXT NOT NULL,
+            skill_path TEXT,
+            cursor_rule_path TEXT,
+            semgrep_path TEXT,
+            pytest_path TEXT,
+            verified INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE rejections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            diagnosis_id INTEGER REFERENCES diagnoses(id),
+            reason TEXT NOT NULL,
+            rejected_at TEXT NOT NULL
+        );
+        INSERT INTO errors (payload_json, captured_at, project_fingerprint)
+            VALUES ('{}', '2026-01-01T00:00:00+00:00', 'legacy-proj');
+        INSERT INTO diagnoses (error_id, diagnosis_json, model, created_at)
+            VALUES (1, '{}', 'legacy-model', '2026-01-01T00:00:00+00:00');
+        INSERT INTO artifacts
+            (diagnosis_id, slug, skill_path, cursor_rule_path,
+             semgrep_path, pytest_path, verified, created_at)
+        VALUES
+            (1, 'legacy-slug', 's.md', 'r.mdc', NULL, 't.py', 1,
+             '2026-01-01T00:00:00+00:00');
+        """
+    )
+    raw.commit()
+    raw.close()
+
+    conn = storage.connect(db_path)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info('artifacts')")}
+        assert {"pattern_id", "pattern_origin"} <= cols
+
+        rows = storage.list_artifacts(conn)
+        assert len(rows) == 1
+        legacy = rows[0]
+        assert legacy.slug == "legacy-slug"
+        assert legacy.diagnosis_id == 1
+        assert legacy.pattern_id is None
+        assert legacy.pattern_origin is None
+
+        new_id = storage.insert_match(
+            conn,
+            slug="new-slug",
+            pattern_id="new-pat",
+            pattern_origin="bundled",
+            paths={"skill_path": "s"},
+            verified=True,
+        )
+        fresh = storage.get_artifact(conn, new_id)
+        assert fresh is not None
+        assert fresh.diagnosis_id is None
+        assert fresh.pattern_id == "new-pat"
+    finally:
+        conn.close()
+
+
+def test_migration_is_idempotent(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    conn = storage.connect(db_path)
+    storage.insert_match(
+        conn,
+        slug="a",
+        pattern_id="p",
+        pattern_origin="bundled",
+        paths={},
+        verified=True,
+    )
+    conn.close()
+
+    # Re-open: init_schema runs again; migration must be a no-op.
+    conn = storage.connect(db_path)
+    try:
+        rows = storage.list_artifacts(conn)
+        assert len(rows) == 1
+        assert rows[0].pattern_id == "p"
+    finally:
+        conn.close()
