@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "immunize"
 version = "0.0.1"
-description = "Turn runtime errors from AI coding assistants into verified, cross-tool immunity artifacts (SKILL.md, Cursor rules, Semgrep rules, pytest tests)."
+description = "A curated pattern library that stops AI coding assistants from repeating common runtime errors — offline, no API key required."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -17,12 +17,14 @@ keywords = [
     "gemini-cli",
     "ai-coding",
     "developer-tools",
-    "agentskills",
     "skills",
     "regression-tests",
+    "pattern-library",
+    "error-prevention",
+    "guardrails",
 ]
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
