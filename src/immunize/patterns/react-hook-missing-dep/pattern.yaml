@@ -1,0 +1,24 @@
+id: react-hook-missing-dep
+version: 1
+schema_version: 1
+author: "@viditkbhatnagar"
+origin: bundled
+error_class: lint
+languages:
+  - javascript
+  - typescript
+description: "React useEffect or useCallback referencing a reactive value without declaring it in the dependency array."
+
+match:
+  stderr_patterns:
+    - "React Hook useEffect has a missing dependency"
+    - "React Hook useCallback has a missing dependency"
+  stdout_patterns: []
+  error_class_hint: null
+  min_confidence: 0.70
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30
