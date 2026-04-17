@@ -317,6 +317,49 @@ def verify_cmd(
         raise typer.Exit(1)
 
 
+# --- install-skill ----------------------------------------------------------
+_PROJECT_DIR_OPT = typer.Option(
+    None,
+    "--project-dir",
+    help="Directory to install into. Defaults to the current working directory.",
+)
+_FORCE_OPT = typer.Option(
+    False,
+    "--force",
+    help="Overwrite an existing SKILL.md whose bytes differ from the bundled skill.",
+)
+
+
+@app.command("install-skill")
+def install_skill_cmd(
+    project_dir: Path | None = _PROJECT_DIR_OPT,
+    force: bool = _FORCE_OPT,
+) -> None:
+    """Copy the bundled immunize-manager skill into a project's .claude/skills/.
+
+    Idempotent: if the destination file already exists with identical bytes,
+    exits 0 with no change. If it exists with different bytes, exits 1 unless
+    --force is passed.
+    """
+    from immunize.skill_install import SkillInstallError, install_skill
+
+    target = project_dir if project_dir is not None else Path.cwd()
+    try:
+        result = install_skill(target, force=force)
+    except SkillInstallError as exc:
+        console_err.print(f"[red]immunize: {exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    if result.action == "installed":
+        console_out.print(f"Installed immunize-manager skill to {result.destination}")
+    elif result.action == "overwritten":
+        console_out.print(f"Overwrote immunize-manager skill at {result.destination}")
+    elif result.action == "unchanged":
+        console_out.print(
+            f"immunize-manager skill already installed at {result.destination} (no change)"
+        )
+
+
 # --- author-pattern ---------------------------------------------------------
 _FROM_ERROR_OPT = typer.Option(..., "--from-error", exists=True, dir_okay=False)
 _OUTPUT_OPT = typer.Option(..., "--output", file_okay=False)
