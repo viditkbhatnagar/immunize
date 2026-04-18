@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] — TBD
+## [0.2.0] — 2026-04-19
 
 Flagship: a Claude Code `PostToolUseFailure` hook that auto-captures bash
 failures with zero manual intervention. Run `immunize install-hook` once
