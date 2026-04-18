@@ -9,13 +9,38 @@ languages:
 description: "HTTP client calls an API in a loop with no backoff; the first 429 response crashes the whole script instead of retrying after a pause."
 
 match:
+  # v0.2.0 calibration: anchors are all HTTP-client-specific; bare phrases
+  # like "Too Many Requests" or "rate limit" that can appear in unrelated log
+  # lines are NOT stderr_patterns — they only score via the `rate_limit`
+  # error-class hint (0.15). The four anchors below all require a genuine
+  # HTTP client context:
+  #   1. `429 Too Many Requests` — exact HTTP status line (requests/httpx).
+  #   2. `RateLimitError`        — SDK exception class (openai, anthropic,
+  #                                stripe, etc. — all use this name).
+  #   3. `HTTPError.*\b429\b`    — HTTPError class + word-bounded 429 on the
+  #                                same line (covers requests.HTTPError and
+  #                                urllib.error.HTTPError variants).
+  #   4. `rate_limit_error`      — snake-cased JSON error-type string found
+  #                                in SDK structured error responses (needed
+  #                                for message-only pastes lacking traceback).
+  # Threshold 0.50 rules out accidental matches: bare "Too Many Requests" or
+  # "rate limit" elsewhere in stderr maxes at 0.25 (hint 0.15 + lang 0.10).
+  # Recall 7/7 on the 7 real-world samples surveyed. See
+  # _planning/MATCHER_CALIBRATION_V020.md.
   stderr_patterns:
-    - "429"
-    - "Too Many Requests"
-    - "rate limit"
+    - "429 Too Many Requests"
+    - "RateLimitError"
+    - "HTTPError.*\\b429\\b"
+    - "rate_limit_error"
   stdout_patterns: []
   error_class_hint: rate_limit
-  min_confidence: 0.70
+  # v0.2.0 Commit 7.5: dropped from 0.50 → 0.45 so a single tight anchor
+  # (RateLimitError, HTTPError.*\b429\b, 429 Too Many Requests, or
+  # rate_limit_error — all HTTP-client-scoped) plus the `rate_limit` hint
+  # clears on their own (0.30 + 0.15 = 0.45). Combined with matcher.py's
+  # epsilon-tolerant comparison, this avoids IEEE-754 float precision
+  # tripping the threshold at exactly 0.45.
+  min_confidence: 0.45
 
 verification:
   pytest_relative_path: test_template.py

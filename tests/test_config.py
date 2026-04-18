@@ -85,7 +85,7 @@ def test_nested_toml_keys(tmp_path: Path) -> None:
 
 def test_defaults_populate_local_patterns_dir_from_cwd(tmp_path: Path) -> None:
     settings = load_settings(cwd=tmp_path)
-    assert settings.min_match_confidence == 0.70
+    assert settings.min_match_confidence == 0.30
     assert settings.local_patterns_dir == tmp_path.resolve() / ".immunize" / "patterns_local"
 
 

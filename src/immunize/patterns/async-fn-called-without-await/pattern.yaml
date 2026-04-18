@@ -9,12 +9,19 @@ languages:
 description: "An async def is called without await; the coroutine object is used as if it were the resolved value and crashes at the first operation that expects a real return type."
 
 match:
+  # v0.2.0 calibration: old anchor `"coroutine was never awaited"` had zero
+  # recall — all 5 surveyed real warnings contained a coroutine name between
+  # "coroutine" and "was never awaited" (e.g., `coroutine 'main' was never
+  # awaited`), so the literal phrase with no name never matched. Replaced
+  # with a single tight regex that captures the canonical form. Dropped the
+  # `RuntimeWarning` anchor (too broad — fires on every Python RuntimeWarning).
+  # Single-anchor match + python lang = 0.4 clears 0.30. See
+  # _planning/MATCHER_CALIBRATION_V020.md.
   stderr_patterns:
-    - "coroutine was never awaited"
-    - "RuntimeWarning"
+    - "coroutine '[^']+' was never awaited"
   stdout_patterns: []
   error_class_hint: null
-  min_confidence: 0.75
+  min_confidence: 0.30
 
 verification:
   pytest_relative_path: test_template.py

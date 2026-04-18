@@ -10,12 +10,23 @@ languages:
 description: "Cross-origin authenticated fetch call missing credentials: 'include'; browser drops cookies and the request is rejected by CORS."
 
 match:
+  # v0.2.0 calibration: the bare word "credentials" matched far too much noise
+  # (password prompts, basic auth, etc.). Replaced with three tight phrases
+  # that together cover Chrome's "credentials mode is 'include'" variant,
+  # Firefox's "Credential is not supported" variant, and any output mentioning
+  # the Access-Control-Allow-Credentials header explicitly. At threshold 0.45,
+  # single-anchor + cors hint clears, which catches the Chrome wildcard-origin
+  # case (no ACA-Credentials header named but credentials mode is include) as
+  # well as explicit header-missing errors. Non-credential CORS failures
+  # (plain missing ACA-Origin, preflight rejects) correctly stay below.
+  # See _planning/MATCHER_CALIBRATION_V020.md.
   stderr_patterns:
     - "Access-Control-Allow-Credentials"
-    - "credentials"
+    - "credentials mode is 'include'"
+    - "Credential is not supported"
   stdout_patterns: []
   error_class_hint: cors
-  min_confidence: 0.75
+  min_confidence: 0.45
 
 verification:
   pytest_relative_path: test_template.py

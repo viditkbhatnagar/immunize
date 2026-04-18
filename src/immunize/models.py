@@ -59,7 +59,14 @@ class Settings(BaseModel):
     verify_retry_count: int = 1
     project_dir: Path
     state_db_path: Path
-    min_match_confidence: float = Field(default=0.70, ge=0.0, le=1.0)
+    # Global floor on match confidence, applied AFTER each pattern's own
+    # min_confidence filter. Default 0.30 so per-pattern thresholds (which
+    # the author tunes for precision) remain authoritative; raise this via
+    # IMMUNIZE_MIN_MATCH_CONFIDENCE in CI/strict-mode deployments to gate
+    # every pattern at a higher shared threshold. Before v0.2.0 this was
+    # 0.70, which silently shadowed per-pattern calibration and made the
+    # lower-threshold patterns dead code.
+    min_match_confidence: float = Field(default=0.30, ge=0.0, le=1.0)
     local_patterns_dir: Path | None = None
 
     @model_validator(mode="after")

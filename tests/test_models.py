@@ -62,7 +62,7 @@ def test_settings_defaults_keep_semgrep_off(tmp_path: Path) -> None:
     assert settings.model == "claude-sonnet-4-6"
     assert settings.verify_timeout_seconds == 30
     assert settings.verify_retry_count == 1
-    assert settings.min_match_confidence == 0.70
+    assert settings.min_match_confidence == 0.30
     assert settings.local_patterns_dir == tmp_path / ".immunize" / "patterns_local"
 
 

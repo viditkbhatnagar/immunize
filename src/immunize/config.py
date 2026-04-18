@@ -16,7 +16,10 @@ DEFAULTS: dict[str, Any] = {
     "generate_semgrep": False,
     "verify_timeout_seconds": 30,
     "verify_retry_count": 1,
-    "min_match_confidence": 0.70,
+    # Must stay in sync with Settings.min_match_confidence default in models.py.
+    # 0.30 lets per-pattern thresholds be authoritative; raise via
+    # IMMUNIZE_MIN_MATCH_CONFIDENCE for CI strict-mode.
+    "min_match_confidence": 0.30,
 }
 
 

@@ -9,12 +9,18 @@ languages:
 description: "Attribute access on a value that can be None; raises AttributeError: 'NoneType' object has no attribute ..."
 
 match:
+  # v0.2.0 calibration: tightened to full phrases. Added the subscript variant
+  # ("'NoneType' object is not subscriptable") because it shares the same
+  # failure mode (unchecked None) and the SKILL's "guard against None" remedy
+  # applies to both. Single-anchor match + null_ref hint + python lang = 0.55,
+  # clearing 0.30. Both anchors are canonical CPython error strings — zero
+  # false-positive surface. See _planning/MATCHER_CALIBRATION_V020.md.
   stderr_patterns:
-    - "AttributeError"
-    - "'NoneType' object has no attribute"
+    - "AttributeError: 'NoneType' object has no attribute"
+    - "TypeError: 'NoneType' object is not subscriptable"
   stdout_patterns: []
   error_class_hint: null_ref
-  min_confidence: 0.70
+  min_confidence: 0.30
 
 verification:
   pytest_relative_path: test_template.py
