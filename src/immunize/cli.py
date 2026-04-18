@@ -95,7 +95,29 @@ def capture_cmd(
         settings = load_settings()
         project_dir = settings.project_dir
         conn = storage.connect(settings.state_db_path)
-        payload = _read_payload(stdin_plain=stdin_plain, source=source, cwd=settings.project_dir)
+
+        # Claude Code PostToolUseFailure hook speaks a different stdin contract
+        # than manual/shell-wrapper captures: a hook JSON object with tool_name,
+        # tool_input, error, etc. — not a CapturePayload. Read it raw, dump for
+        # offline inspection, translate, and bail early on non-Bash failures.
+        if source == "claude-code-hook":
+            hook_json = capture.read_hook_json_from_stdin(sys.stdin)
+            capture.dump_hook_payload(hook_json, settings.project_dir)
+            translated = capture.payload_from_claude_code_hook(hook_json, cwd=settings.project_dir)
+            if translated is None:
+                _emit_json(
+                    {
+                        "outcome": "skipped",
+                        "reason": "non-Bash tool failure",
+                        "tool_name": hook_json.get("tool_name"),
+                    }
+                )
+                return
+            payload = translated
+        else:
+            payload = _read_payload(
+                stdin_plain=stdin_plain, source=source, cwd=settings.project_dir
+            )
         capture.persist(conn, payload)
 
         patterns = matcher.load_patterns(
