@@ -382,6 +382,51 @@ def install_skill_cmd(
         )
 
 
+# --- install-hook -----------------------------------------------------------
+_HOOK_PROJECT_DIR_OPT = typer.Option(
+    None,
+    "--project-dir",
+    help="Directory to install into. Defaults to the current working directory.",
+)
+_HOOK_FORCE_OPT = typer.Option(
+    False,
+    "--force",
+    help="Overwrite an existing immunize hook entry whose command differs from the canonical one.",
+)
+
+
+@app.command("install-hook")
+def install_hook_cmd(
+    project_dir: Path | None = _HOOK_PROJECT_DIR_OPT,
+    force: bool = _HOOK_FORCE_OPT,
+) -> None:
+    """Register a Claude Code PostToolUseFailure hook that auto-captures bash failures.
+
+    Writes (or merges into) the project-scope ``.claude/settings.json``. Existing
+    hooks on other events, and existing PostToolUseFailure entries that aren't
+    ours, are preserved. Idempotent: running twice is a no-op.
+
+    Also adds ``hook_payloads/`` to ``.immunize/.gitignore`` so debug dumps
+    written by the hook don't land in commits.
+    """
+    from immunize.hook_installer import install_claude_code_hook
+
+    target = project_dir if project_dir is not None else Path.cwd()
+    result = install_claude_code_hook(target, force=force)
+
+    if result.status == "installed":
+        console_out.print(f"Installed Claude Code hook at {result.settings_path}")
+        console_out.print("Restart Claude Code for the hook to take effect.")
+    elif result.status == "overwritten":
+        console_out.print(f"Overwrote immunize hook at {result.settings_path}")
+        console_out.print("Restart Claude Code for the hook to take effect.")
+    elif result.status == "already_installed":
+        console_out.print(f"immunize hook already installed at {result.settings_path}; no change.")
+    else:
+        console_err.print(f"[red]immunize install-hook: {result.error}[/red]")
+        raise typer.Exit(1)
+
+
 # --- author-pattern ---------------------------------------------------------
 _FROM_ERROR_OPT = typer.Option(..., "--from-error", exists=True, dir_okay=False)
 _OUTPUT_OPT = typer.Option(..., "--output", file_okay=False)
