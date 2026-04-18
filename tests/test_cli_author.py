@@ -152,6 +152,23 @@ def test_missing_api_key_exits_1_with_clear_message(
     assert "ANTHROPIC_API_KEY" in result.output
 
 
+def test_missing_anthropic_extra_emits_install_hint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # v0.2.0: anthropic moved to [author] extra. If an end user runs
+    # author-pattern without it installed, the lazy import should exit 1
+    # with a Rich hint pointing at `pip install 'immunize[author]'`.
+    import sys
+
+    # sys.modules[name] = None is Python's documented way to simulate a
+    # missing module: subsequent `import anthropic` raises ImportError.
+    monkeypatch.setitem(sys.modules, "anthropic", None)
+    result = _run(tmp_path, api_key="sk-test")
+    assert result.exit_code == 1
+    assert "[author]" in result.output
+    assert "pip install" in result.output
+
+
 def test_missing_input_file_exits_with_typer_validation_error(tmp_path: Path) -> None:
     # Scenario #3 — Typer's Option(exists=True) trips before our code runs.
     out = tmp_path / "patterns"

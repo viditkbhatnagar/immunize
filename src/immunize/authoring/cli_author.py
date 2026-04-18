@@ -46,6 +46,28 @@ from immunize.models import AuthoringDraft, CapturePayload
 console_err = Console(stderr=True)
 
 
+def _import_anthropic() -> Any:
+    """Lazy import the ``anthropic`` SDK with a helpful end-user error path.
+
+    End users install the plain ``immunize`` wheel — no ``anthropic`` in the
+    dep tree. Contributors running ``immunize author-pattern`` install the
+    optional ``[author]`` extra. If a user stumbles into this command without
+    the extra, emit a one-line install hint and exit cleanly rather than
+    letting a raw ModuleNotFoundError bubble up.
+    """
+    try:
+        import anthropic
+
+        return anthropic
+    except ImportError as exc:
+        # Rich treats [...] as markup; escape the brackets so `[author]`
+        # renders literally rather than being parsed as a style tag.
+        console_err.print(r"[red]immunize author-pattern requires the \[author] extra.[/red]")
+        console_err.print(r"Install with: [cyan]pip install 'immunize\[author]'[/cyan]")
+        console_err.print("Then re-run this command.")
+        raise typer.Exit(1) from exc
+
+
 class _DraftError(RuntimeError):
     """Drafting pipeline gave up — malformed tool output after retry."""
 
@@ -258,10 +280,10 @@ def author_pattern_cmd(
 
     payload = _load_capture_payload(from_error)
 
-    # Lazy import: the SINGLE allowed runtime import of `anthropic` in src/.
-    # Keeps `immunize capture`, `list`, `verify`, and `remove` anthropic-free
-    # even transitively through the cli.py command table.
-    import anthropic
+    # Lazy import via helper: anthropic now lives behind the [author] extra.
+    # Users who did `pip install immunize` and then accidentally ran
+    # author-pattern get a one-line hint instead of a raw ImportError.
+    anthropic = _import_anthropic()
 
     from immunize.config import load_settings
 
