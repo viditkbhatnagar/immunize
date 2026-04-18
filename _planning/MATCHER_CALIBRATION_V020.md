@@ -237,8 +237,20 @@ min_confidence: 0.40
 bonus never fired. Dropped the hint entirely and tightened anchors to
 UPPER_SNAKE key convention (`KeyError: '[A-Z][A-Z0-9_]*'`) plus the actual
 accessor syntax (`os\.environ\[`). The upper-snake key convention rejects
-regular dict KeyErrors with camelCase/lowercase keys. Sample 5 still clears
-via anchor 1 alone (0.3) plus python lang (0.1) = 0.4.
+regular dict KeyErrors with camelCase/lowercase keys. Samples 1–4 all carry
+both anchors (accessor frame + UPPER_SNAKE key) and score 0.70 → match at
+threshold 0.40.
+
+**Scope limit intentionally kept at 0.40**: a bare `KeyError: 'UPPER_SNAKE'`
+with no traceback frame showing `os.environ[` is genuinely ambiguous — a
+module-scope `CONFIG` dict lookup (`CONFIG["API_KEY"]`) produces identical
+stderr. Real-world environ tracebacks almost always carry both anchors
+(samples 1–4 above); we deliberately accept missing sample 5's pattern
+(django-environ wrapper, no literal `os.environ[` in frame) rather than
+false-positive on regular dict lookups. Effective single-anchor recall:
+4/5. If a future release wants to cover the wrapper-library case, the
+right fix is a second pattern (`missing-env-var-django-environ`) with
+anchors specific to that wrapper, not a looser threshold here.
 
 ---
 
@@ -341,6 +353,59 @@ recall because real warnings always embed a coroutine name between
 capturing the canonical form. Dropped the `RuntimeWarning` anchor because it
 was too broad (fires on every Python RuntimeWarning regardless of topic).
 Threshold 0.30 allows the single specific anchor (0.3) to clear on its own.
+
+## Commit 7.5 — three calibration follow-ups
+
+End-to-end gauntlet testing after Commit 7 surfaced three issues the
+per-pattern score tables above had assumed away:
+
+1. **IEEE 754 precision on 0.45 thresholds.** `0.3 + 0.15` in Python is
+   `0.44999999999999996`, which fails a strict `>= 0.45` check. Affected
+   `fetch-missing-credentials` (per-pattern 0.45) at exactly the
+   single-anchor + hint configuration. Fix: added `+ 1e-9` epsilon to
+   both matcher-level and cli-level threshold comparisons.
+   [matcher.py:_match()](../src/immunize/matcher.py#L91),
+   [cli.py:_apply_payload()](../src/immunize/cli.py).
+
+2. **`ENOTFOUND` substring-colliding inside `ModuleNotFoundError`.**
+   `guess_error_class` used plain lowercase substring matching, which let
+   the `network` class keyword `ENOTFOUND` match inside `ModuleNotFoundError`
+   — tying the `import` and `network` classes and returning `"other"`.
+   That swallowed the `import` hint bonus and kept `import-not-found-python`
+   stuck at 0.40 against its 0.50 threshold. Fix: all 28 keywords across 8
+   classes are now matched as word-bounded regex (`\b<kw>\b`), which
+   rejects `ENOTFOUND` inside `ModuleNotFoundError` and defensively guards
+   every other keyword against similar collisions. A programmatic audit
+   confirmed this was the only actual collision, but applied word
+   boundaries universally for correctness.
+
+3. **rate-limit single-anchor threshold.** The Commit 5 calibration table
+   showed 7/7 recall at threshold 0.50, but that assumed either two
+   anchors hit or Python-language signatures were present. Real SDK
+   message-only pastes (e.g. `openai.RateLimitError: Error code: 429`)
+   have neither — just one anchor + the hint. Dropped per-pattern
+   threshold 0.50 → 0.45 so anchor (0.30) + hint (0.15) = 0.45 clears
+   alone. The four new anchors remain HTTP-client-scoped so false-positive
+   risk on unrelated 429s / rate-limit phrases is unchanged.
+
+### Post-Commit-7.5 end-to-end single-anchor recall
+
+Gauntlet: `immunize run python -c "<single line stderr>"` in a fresh scratch
+directory, for each pattern's characteristic real-world signature.
+
+| Pattern | Single-anchor stderr | Fires? | Score | Notes |
+|---|---|---|---|---|
+| react-hook-missing-dep | `React Hook useEffect has a missing dependency: foo  react-hooks/exhaustive-deps` | ✓ | 0.60 | Both anchors naturally co-occur in ESLint output. |
+| fetch-missing-credentials | `CORS policy: Access-Control-Allow-Credentials missing when credentials mode is include` | ✓ | 0.45 | Epsilon-tolerant after Commit 7.5. |
+| python-none-attribute-access | `AttributeError: 'NoneType' object has no attribute 'name'` | ✓ | 0.45 | |
+| import-not-found-python | `ModuleNotFoundError: No module named 'foo'` | ✓ | 0.55 | Import hint now fires after word-boundary fix. |
+| missing-env-var | `KeyError: 'DATABASE_URL'` alone | ✗ (by design) | 0.30 | See scope-limit note above. |
+| rate-limit-no-backoff | `openai.RateLimitError: Error code: 429` | ✓ | 0.45 | Lowered threshold in Commit 7.5. |
+| async-fn-called-without-await | `RuntimeWarning: coroutine 'main' was never awaited` | ✓ | 0.30 | |
+
+**6/7** single-anchor single-line recall. The 7th (missing-env-var) ships
+at 4/5 multi-line recall with an intentional scope limit to prevent
+dict-lookup false positives.
 
 ## Diagnostic dump gating
 

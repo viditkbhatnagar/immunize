@@ -34,7 +34,13 @@ match:
     - "rate_limit_error"
   stdout_patterns: []
   error_class_hint: rate_limit
-  min_confidence: 0.50
+  # v0.2.0 Commit 7.5: dropped from 0.50 → 0.45 so a single tight anchor
+  # (RateLimitError, HTTPError.*\b429\b, 429 Too Many Requests, or
+  # rate_limit_error — all HTTP-client-scoped) plus the `rate_limit` hint
+  # clears on their own (0.30 + 0.15 = 0.45). Combined with matcher.py's
+  # epsilon-tolerant comparison, this avoids IEEE-754 float precision
+  # tripping the threshold at exactly 0.45.
+  min_confidence: 0.45
 
 verification:
   pytest_relative_path: test_template.py

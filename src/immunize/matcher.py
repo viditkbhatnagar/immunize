@@ -27,7 +27,12 @@ from rich.console import Console
 
 from immunize.models import CapturePayload, MatchResult, Pattern
 
-# Public: consumed by authoring tools and exercised directly in tests.
+# Public: consumed by authoring tools (as valid hint-class names) and
+# exercised directly in tests. The string form remains authoritative; the
+# compiled regex form below is a runtime accelerator that additionally
+# enforces word boundaries so keywords can't substring-collide across
+# classes (v0.2.0 fix: "ENOTFOUND" was substring-matching inside
+# "ModuleNotFoundError" and tying import vs network to 'other').
 ERROR_CLASS_HINTS: dict[str, list[str]] = {
     "cors": ["CORS", "Access-Control-Allow", "preflight"],
     "import": ["ModuleNotFoundError", "ImportError", "Cannot find module"],
@@ -38,6 +43,25 @@ ERROR_CLASS_HINTS: dict[str, list[str]] = {
     "config": ["env var", "environment variable", "not set", "tsconfig"],
     "network": ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "getaddrinfo"],
 }
+
+# Word-bounded regex form. \b on both sides rejects substring collisions
+# (ENOTFOUND inside ModuleNotFoundError; CORS inside CORSICAN; 429 inside
+# 4290). Hyphens and spaces inside keywords like "Access-Control-Allow" are
+# already non-word characters, so internal \b assertions aren't needed —
+# only outer boundaries. re.IGNORECASE matches the prior .lower()-based
+# semantics; re.escape is defensive in case a keyword ever gains a regex
+# metachar.
+_HINT_REGEXES: dict[str, list[re.Pattern[str]]] = {
+    cls: [re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE) for kw in keywords]
+    for cls, keywords in ERROR_CLASS_HINTS.items()
+}
+
+# Tiny epsilon for confidence-threshold comparisons. IEEE 754 binary floats
+# can't represent 0.3 or 0.15 exactly; e.g. 0.3 + 0.15 evaluates to
+# 0.44999999999999996 in CPython, which trips a strict `>= 0.45` check.
+# Adding 1e-9 before the comparison restores author intent while staying
+# well below any calibration delta that matters.
+_CONFIDENCE_EPSILON = 1e-9
 
 # Language detection: each language maps to a list of pre-compiled regexes.
 # Any-signature match adds the language to guess_languages' result. Multiple
@@ -93,7 +117,9 @@ def match(payload: CapturePayload, patterns: list[Pattern]) -> list[MatchResult]
     their own ``match.min_confidence`` threshold, sorted descending.
     """
     scored = [score_pattern(payload, p) for p in patterns]
-    above = [r for r in scored if r.confidence >= r.pattern.match.min_confidence]
+    above = [
+        r for r in scored if r.confidence + _CONFIDENCE_EPSILON >= r.pattern.match.min_confidence
+    ]
     above.sort(key=lambda r: r.confidence, reverse=True)
     return above
 
@@ -151,17 +177,18 @@ def score_pattern(payload: CapturePayload, pattern: Pattern) -> MatchResult:
 
 
 def guess_error_class(stderr: str) -> str:
-    """Keyword-based error-class guess.
+    """Keyword-based error-class guess with word-boundary safety.
 
-    Both stderr and each keyword are lowercased before substring match.
-    Returns the class whose keywords produce the most hits. Returns
-    ``"other"`` when nothing matches or when multiple classes tie for
-    first place (avoids false confidence).
+    Returns the class whose keywords produce the most hits in ``stderr``.
+    Uses pre-compiled word-bounded regex (_HINT_REGEXES) rather than plain
+    substring matching so keywords like "ENOTFOUND" don't accidentally
+    match inside unrelated longer identifiers like "ModuleNotFoundError".
+    Returns ``"other"`` when nothing matches or when multiple classes tie
+    for first place (avoids false confidence on ambiguous stderr).
     """
-    lowered = stderr.lower()
     scores: dict[str, int] = {}
-    for cls, keywords in ERROR_CLASS_HINTS.items():
-        count = sum(1 for kw in keywords if kw.lower() in lowered)
+    for cls, regexes in _HINT_REGEXES.items():
+        count = sum(1 for rx in regexes if rx.search(stderr))
         if count > 0:
             scores[cls] = count
     if not scores:

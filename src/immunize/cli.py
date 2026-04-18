@@ -489,7 +489,10 @@ def _apply_payload(
         settings.local_patterns_dir,
     )
     results = matcher.match(payload, patterns)
-    applicable = [m for m in results if m.confidence >= settings.min_match_confidence]
+    # Epsilon shields the >= check from IEEE 754 imprecision on tenths
+    # (e.g., 0.3 + 0.15 == 0.44999999999999996 in CPython). Same trick used
+    # inside matcher.match() for per-pattern thresholds.
+    applicable = [m for m in results if m.confidence + 1e-9 >= settings.min_match_confidence]
 
     if not applicable:
         _emit_json({"outcome": "unmatched", "matched": False, "can_author_locally": True})
