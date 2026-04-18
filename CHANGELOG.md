@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-04-18
+
+### Fixed
+- `immunize capture` verify step silently failed when pytest wasn't installed
+  in the user's project environment. Pattern verification runs pytest in a
+  subprocess, but pytest was only declared under the [dev] extra — not as a
+  runtime dependency. Result: fresh installs via `pip install immunize`
+  appeared to work but the first failed capture never injected anything
+  because verify couldn't run. Promoted pytest to a runtime dependency so
+  fresh installs work end-to-end without additional setup.
+
 ## [0.2.0] — 2026-04-19
 
 Flagship: a Claude Code `PostToolUseFailure` hook that auto-captures bash
