@@ -9,12 +9,22 @@ languages:
 description: "Code indexes os.environ directly; missing config surfaces as a raw KeyError with no actionable message."
 
 match:
+  # v0.2.0 calibration: old anchors had zero real-world recall. Real tracebacks
+  # don't contain the phrases "env var" or "environment variable" that the
+  # `config` hint keys off — all 5 surveyed samples scored 0.4 against the
+  # old 0.75 threshold. Replaced with:
+  #   1. `KeyError: 'UPPER_SNAKE'` — matches os.environ KeyError keys which
+  #      are overwhelmingly UPPER_SNAKE_CASE by convention. Rejects regular
+  #      dict KeyErrors with camelCase or lowercase keys.
+  #   2. `os\.environ\[` — the exact accessor syntax that causes the crash.
+  # Dropped the `config` hint (never fired on real payloads). Single-anchor
+  # match + python lang = 0.4 clears. See _planning/MATCHER_CALIBRATION_V020.md.
   stderr_patterns:
-    - "KeyError:"
-    - "os.environ"
+    - "KeyError: '[A-Z][A-Z0-9_]*'"
+    - "os\\.environ\\["
   stdout_patterns: []
-  error_class_hint: config
-  min_confidence: 0.75
+  error_class_hint: null
+  min_confidence: 0.40
 
 verification:
   pytest_relative_path: test_template.py

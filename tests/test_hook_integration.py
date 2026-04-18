@@ -94,6 +94,9 @@ def test_real_claude_code_hook_payload_matches_verifies_injects(tmp_path: Path) 
 
     env = {k: v for k, v in os.environ.items() if not k.startswith("IMMUNIZE_")}
     env["XDG_CONFIG_HOME"] = str(tmp_path / "xdg")
+    # Diagnostic hook-payload dumps are gated behind this env in v0.2.0; the
+    # integration test explicitly opts in so it can assert the dump lands.
+    env["IMMUNIZE_DEBUG_HOOK"] = "1"
 
     proc = subprocess.run(
         [sys.executable, "-m", "immunize", "capture", "--source", "claude-code-hook"],

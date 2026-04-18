@@ -164,7 +164,10 @@ def test_dump_is_best_effort_on_permission_failure(
 # --- integration: end-to-end through the CLI --------------------------------
 
 
-def test_cli_hook_source_matches_cors_pattern_and_injects(tmp_path: Path) -> None:
+def test_cli_hook_source_matches_cors_pattern_and_injects(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("IMMUNIZE_DEBUG_HOOK", "1")
     hook = _cors_hook_payload(tmp_path)
     result = runner.invoke(
         app,
@@ -177,13 +180,14 @@ def test_cli_hook_source_matches_cors_pattern_and_injects(tmp_path: Path) -> Non
     assert payload["pattern_id"] == "fetch-missing-credentials"
     assert payload["pattern_origin"] == "bundled"
 
-    # Dump landed in the expected location.
+    # Dump landed in the expected location (debug env was set).
     dumps = list((tmp_path / ".immunize" / "hook_payloads").glob("*.json"))
     assert len(dumps) == 1
     assert json.loads(dumps[0].read_text())["session_id"] == "sess-abc-123"
 
 
-def test_cli_hook_source_skips_non_bash(tmp_path: Path) -> None:
+def test_cli_hook_source_skips_non_bash(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("IMMUNIZE_DEBUG_HOOK", "1")
     hook = {
         "session_id": "sess-xyz",
         "tool_name": "Edit",
@@ -204,8 +208,23 @@ def test_cli_hook_source_skips_non_bash(tmp_path: Path) -> None:
     # Nothing injected.
     assert not (tmp_path / ".claude").exists()
     assert not (tmp_path / "tests" / "immunized").exists()
-    # But the raw payload still got dumped for inspection.
+    # But the raw payload still got dumped for inspection (debug env was set).
     assert any((tmp_path / ".immunize" / "hook_payloads").glob("*.json"))
+
+
+def test_cli_hook_source_skips_dump_without_debug_env(tmp_path: Path) -> None:
+    # Default behavior in v0.2.0: no IMMUNIZE_DEBUG_HOOK set → no dumps on disk.
+    # Keeps normal users from accumulating .immunize/hook_payloads/ files.
+    hook = _cors_hook_payload(tmp_path)
+    result = runner.invoke(
+        app,
+        ["capture", "--source", "claude-code-hook"],
+        input=json.dumps(hook),
+    )
+    assert result.exit_code == 0
+    hp_dir = tmp_path / ".immunize" / "hook_payloads"
+    if hp_dir.exists():
+        assert not list(hp_dir.glob("*.json"))
 
 
 def test_cli_hook_source_handles_malformed_json(tmp_path: Path) -> None:

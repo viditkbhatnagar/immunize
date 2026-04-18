@@ -9,12 +9,18 @@ languages:
 description: "Imports reference a module or symbol that does not exist; raises ModuleNotFoundError or ImportError when the import runs."
 
 match:
+  # v0.2.0 calibration: anchors unchanged (both are canonical CPython strings
+  # with zero false-positive surface). Threshold dropped from 0.70 → 0.50 so
+  # a single-anchor match (0.3) plus import hint (0.15) plus python lang (0.1)
+  # = 0.55 clears. Before this change, at 0.70, not even a full three-signal
+  # match cleared — the pattern was effectively dead-code. See
+  # _planning/MATCHER_CALIBRATION_V020.md.
   stderr_patterns:
     - "ModuleNotFoundError: No module named"
     - "ImportError: cannot import name"
   stdout_patterns: []
   error_class_hint: import
-  min_confidence: 0.70
+  min_confidence: 0.50
 
 verification:
   pytest_relative_path: test_template.py

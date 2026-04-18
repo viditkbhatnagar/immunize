@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -102,7 +103,12 @@ def capture_cmd(
         # offline inspection, translate, and bail early on non-Bash failures.
         if source == "claude-code-hook":
             hook_json = capture.read_hook_json_from_stdin(sys.stdin)
-            capture.dump_hook_payload(hook_json, settings.project_dir)
+            # Payload dump is a diagnostic for contributors calibrating matcher
+            # recall — not something normal users should accumulate on disk.
+            # Gated behind IMMUNIZE_DEBUG_HOOK=1 in v0.2.0 after Commit 4
+            # empirically confirmed the payload shape.
+            if os.environ.get("IMMUNIZE_DEBUG_HOOK") == "1":
+                capture.dump_hook_payload(hook_json, settings.project_dir)
             translated = capture.payload_from_claude_code_hook(hook_json, cwd=settings.project_dir)
             if translated is None:
                 _emit_json(
