@@ -125,104 +125,7 @@ def capture_cmd(
                 stdin_plain=stdin_plain, source=source, cwd=settings.project_dir
             )
         capture.persist(conn, payload)
-
-        patterns = matcher.load_patterns(
-            _BUNDLED_PATTERNS_DIR,
-            settings.local_patterns_dir,
-        )
-        results = matcher.match(payload, patterns)
-        applicable = [m for m in results if m.confidence >= settings.min_match_confidence]
-
-        if not applicable:
-            _emit_json({"outcome": "unmatched", "matched": False, "can_author_locally": True})
-            console_err.print(
-                "[yellow]immunize: no pattern matched — Claude Code can draft a "
-                "local pattern via the immunize-manager skill.[/yellow]"
-            )
-            return
-
-        top = applicable[0]
-        try:
-            vresult = verify.verify(top.pattern, settings)
-        except Exception as exc:  # noqa: BLE001 -- verify must never crash capture
-            console_err.print(f"[red]immunize: verify raised for {top.pattern.id}: {exc}[/red]")
-            _emit_json(
-                {
-                    "outcome": "matched_verify_failed",
-                    "matched": True,
-                    "verified": False,
-                    "pattern_id": top.pattern.id,
-                    "pattern_origin": top.pattern.origin,
-                    "confidence": top.confidence,
-                    "reason": f"verify raised: {exc}",
-                }
-            )
-            return
-
-        if not vresult.passed:
-            reason = (vresult.error_message or "verify failed")[:500]
-            console_err.print(f"[red]immunize: verify failed for {top.pattern.id}: {reason}[/red]")
-            _emit_json(
-                {
-                    "outcome": "matched_verify_failed",
-                    "matched": True,
-                    "verified": False,
-                    "pattern_id": top.pattern.id,
-                    "pattern_origin": top.pattern.origin,
-                    "confidence": top.confidence,
-                    "reason": reason,
-                }
-            )
-            return
-
-        if dry_run:
-            console_err.print(
-                f"[cyan]immunize: --dry-run — matched {top.pattern.id} "
-                f"(confidence={top.confidence:.2f}); skipping inject.[/cyan]"
-            )
-            _emit_json(
-                {
-                    "outcome": "matched_and_verified",
-                    "matched": True,
-                    "verified": True,
-                    "pattern_id": top.pattern.id,
-                    "pattern_origin": top.pattern.origin,
-                    "confidence": top.confidence,
-                    "dry_run": True,
-                    "artifacts": {},
-                }
-            )
-            return
-
-        paths = inject.inject(top.pattern, project_dir=settings.project_dir, conn=conn)
-        storage.insert_match(
-            conn,
-            slug=paths.slug,
-            pattern_id=top.pattern.id,
-            pattern_origin=top.pattern.origin,
-            paths=paths.as_db_dict(),
-            verified=True,
-        )
-
-        _emit_json(
-            {
-                "outcome": "matched_and_verified",
-                "matched": True,
-                "verified": True,
-                "pattern_id": top.pattern.id,
-                "pattern_origin": top.pattern.origin,
-                "confidence": top.confidence,
-                "artifacts": {
-                    "skill": str(paths.skill_path),
-                    "cursor_rule": str(paths.cursor_rule_path),
-                    "pytest": str(paths.pytest_path),
-                },
-            }
-        )
-        console_err.print(
-            f"[green]✓ Immunized against {top.pattern.id} "
-            f"(confidence={top.confidence:.2f})[/green]"
-        )
+        _apply_payload(payload, settings, conn, dry_run=dry_run)
     except CapturePayloadError as e:
         console_err.print(f"[red]immunize: invalid capture payload[/red]\n{e}")
         console_err.print(
@@ -472,7 +375,212 @@ def author_pattern_cli(
     author_pattern_cmd(from_error=from_error, output=output, model=model)
 
 
+# --- run --------------------------------------------------------------------
+_RUN_NO_CAPTURE_OPT = typer.Option(
+    False,
+    "--no-capture",
+    help="Run the command but skip capture/match on failure.",
+)
+_RUN_SOURCE_OPT = typer.Option(
+    "shell-wrapper",
+    "--source",
+    help="Source label recorded on the CapturePayload when capture fires.",
+)
+_RUN_TIMEOUT_OPT = typer.Option(
+    None,
+    "--timeout",
+    help="Kill the subprocess after N seconds; exit 124 on trip, no capture.",
+)
+
+
+@app.command(
+    "run",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def run_cmd(
+    ctx: typer.Context,
+    no_capture: bool = _RUN_NO_CAPTURE_OPT,
+    source: str = _RUN_SOURCE_OPT,
+    timeout: int | None = _RUN_TIMEOUT_OPT,
+) -> None:
+    """Run a command; on non-zero exit, auto-capture its output for matching.
+
+    Fallback automation path for environments without the Claude Code hook
+    (Cursor, bare terminals, CI, Codex). Wraps any command: stdout and stderr
+    stream live to your terminal, and on non-zero exit the captured bytes
+    feed the matcher — the same pipeline `immunize capture` uses.
+
+    The subprocess's exit code is propagated. A `--timeout` trip exits 124
+    and does NOT fire capture (a missed deadline isn't a runtime bug worth
+    persisting an immunity against).
+
+    ``immunize run`` consumes its own flags before the child command; any
+    flags belonging to the child are passed through because the command
+    uses `ignore_unknown_options`. Example:
+
+        immunize run --timeout 60 pytest --verbose tests/
+
+    Here `--timeout 60` is consumed by immunize and `--verbose tests/` is
+    passed to pytest.
+    """
+    from immunize.runner import run_with_capture
+
+    cmd = list(ctx.args)
+    if not cmd:
+        console_err.print("[red]Usage: immunize run [OPTIONS] <cmd> [args...][/red]")
+        raise typer.Exit(2)
+
+    if source not in _VALID_SOURCES:
+        console_err.print(
+            f"[red]immunize: invalid --source {source!r}; "
+            f"expected one of {_VALID_SOURCES}[/red]"
+        )
+        raise typer.Exit(2)
+
+    result = run_with_capture(cmd, timeout=timeout)
+
+    # Never capture on: clean exit, --no-capture, or --timeout. Always
+    # propagate the child's exit code. A timeout is a deadline decision,
+    # not a runtime bug.
+    if result.exit_code == 0 or no_capture or result.timed_out:
+        raise typer.Exit(result.exit_code)
+
+    # Capture path: construct a CapturePayload from buffers and run the same
+    # match/verify/inject flow as `immunize capture`.
+    try:
+        settings = load_settings()
+        conn = storage.connect(settings.state_db_path)
+        base = capture.build_payload_from_plain(
+            result.stderr,
+            cwd=settings.project_dir,
+            source=source,  # type: ignore[arg-type]
+        )
+        payload = base.model_copy(
+            update={
+                "stdout": result.stdout,
+                "command": " ".join(cmd),
+                "exit_code": result.exit_code,
+            }
+        )
+        capture.persist(conn, payload)
+        _apply_payload(payload, settings, conn, dry_run=False)
+    except Exception as e:  # noqa: BLE001 -- capture must never mask the child's exit
+        console_err.print(f"[red]immunize: unexpected error during capture: {e}[/red]")
+        _append_error_log(Path.cwd(), e)
+
+    raise typer.Exit(result.exit_code)
+
+
 # --- helpers ----------------------------------------------------------------
+def _apply_payload(
+    payload: CapturePayload,
+    settings,  # type: ignore[no-untyped-def]
+    conn,  # type: ignore[no-untyped-def]
+    *,
+    dry_run: bool = False,
+) -> None:
+    """Match → verify → inject → emit-JSON against a pre-persisted payload.
+
+    Shared between `capture` and `run`. Emits exactly one JSON line on stdout
+    per the contract in capture_cmd's docstring; Rich output goes to stderr.
+    """
+    patterns = matcher.load_patterns(
+        _BUNDLED_PATTERNS_DIR,
+        settings.local_patterns_dir,
+    )
+    results = matcher.match(payload, patterns)
+    applicable = [m for m in results if m.confidence >= settings.min_match_confidence]
+
+    if not applicable:
+        _emit_json({"outcome": "unmatched", "matched": False, "can_author_locally": True})
+        console_err.print(
+            "[yellow]immunize: no pattern matched — Claude Code can draft a "
+            "local pattern via the immunize-manager skill.[/yellow]"
+        )
+        return
+
+    top = applicable[0]
+    try:
+        vresult = verify.verify(top.pattern, settings)
+    except Exception as exc:  # noqa: BLE001 -- verify must never crash capture
+        console_err.print(f"[red]immunize: verify raised for {top.pattern.id}: {exc}[/red]")
+        _emit_json(
+            {
+                "outcome": "matched_verify_failed",
+                "matched": True,
+                "verified": False,
+                "pattern_id": top.pattern.id,
+                "pattern_origin": top.pattern.origin,
+                "confidence": top.confidence,
+                "reason": f"verify raised: {exc}",
+            }
+        )
+        return
+
+    if not vresult.passed:
+        reason = (vresult.error_message or "verify failed")[:500]
+        console_err.print(f"[red]immunize: verify failed for {top.pattern.id}: {reason}[/red]")
+        _emit_json(
+            {
+                "outcome": "matched_verify_failed",
+                "matched": True,
+                "verified": False,
+                "pattern_id": top.pattern.id,
+                "pattern_origin": top.pattern.origin,
+                "confidence": top.confidence,
+                "reason": reason,
+            }
+        )
+        return
+
+    if dry_run:
+        console_err.print(
+            f"[cyan]immunize: --dry-run — matched {top.pattern.id} "
+            f"(confidence={top.confidence:.2f}); skipping inject.[/cyan]"
+        )
+        _emit_json(
+            {
+                "outcome": "matched_and_verified",
+                "matched": True,
+                "verified": True,
+                "pattern_id": top.pattern.id,
+                "pattern_origin": top.pattern.origin,
+                "confidence": top.confidence,
+                "dry_run": True,
+                "artifacts": {},
+            }
+        )
+        return
+
+    paths = inject.inject(top.pattern, project_dir=settings.project_dir, conn=conn)
+    storage.insert_match(
+        conn,
+        slug=paths.slug,
+        pattern_id=top.pattern.id,
+        pattern_origin=top.pattern.origin,
+        paths=paths.as_db_dict(),
+        verified=True,
+    )
+    _emit_json(
+        {
+            "outcome": "matched_and_verified",
+            "matched": True,
+            "verified": True,
+            "pattern_id": top.pattern.id,
+            "pattern_origin": top.pattern.origin,
+            "confidence": top.confidence,
+            "artifacts": {
+                "skill": str(paths.skill_path),
+                "cursor_rule": str(paths.cursor_rule_path),
+                "pytest": str(paths.pytest_path),
+            },
+        }
+    )
+    console_err.print(
+        f"[green]✓ Immunized against {top.pattern.id} " f"(confidence={top.confidence:.2f})[/green]"
+    )
+
+
 def _resolve_identifier(raw: str, conn) -> list[storage.ArtifactRow]:
     """Resolve a CLI identifier (int id or pattern slug) to matching rows.
 

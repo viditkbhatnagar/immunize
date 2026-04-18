@@ -18,6 +18,34 @@ that shouldn't match `fetch-missing-credentials` because it's not a credentials
 issue). The pattern_lint FAIL→PASS→FAIL fixture contract is unchanged — only
 stderr regex and threshold moved.
 
+## Two thresholds, one authoritative source
+
+The matcher gates a candidate pattern at two thresholds stacked:
+
+1. **Per-pattern** `pattern.match.min_confidence` (enforced in
+   [`matcher.match()`](../src/immunize/matcher.py#L91) at the pattern level).
+   This is what the author tunes against real-world stderr — the source of
+   truth for precision/recall tradeoffs.
+2. **Global floor** `settings.min_match_confidence` (enforced in
+   [`cli._apply_payload`](../src/immunize/cli.py) after `matcher.match()`).
+   Pre-v0.2.0 default: `0.70`. v0.2.0 default: **`0.30`**.
+
+The pre-v0.2.0 default of 0.70 silently shadowed every per-pattern threshold
+below it. Single-anchor samples (most of the real-world tracebacks surveyed
+here — one specific phrase + language signal + hint adds up to ~0.55) would
+score *above* their pattern's own min_confidence but *below* the 0.70 floor,
+so the pattern was dead code in practice.
+
+Setting the floor default to **0.30** reverses the relationship: per-pattern
+thresholds become authoritative. Contributors write authentic thresholds in
+each `pattern.yaml`; the floor exists only for operators who want a stricter
+global minimum (raise via `IMMUNIZE_MIN_MATCH_CONFIDENCE=0.60` in CI, for
+example).
+
+The recall tables below reflect matches under the new effective threshold
+`max(pattern.min_confidence, 0.30)` — i.e. per-pattern thresholds are now
+what actually fires.
+
 ## Per-pattern detail
 
 ---
