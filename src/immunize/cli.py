@@ -268,19 +268,32 @@ def list_cmd() -> None:
 # --- remove -----------------------------------------------------------------
 @app.command("remove")
 def remove_cmd(
-    artifact_id: int = typer.Argument(..., help="Immunity id from `immunize list`."),
+    identifier: str = typer.Argument(..., help="Immunity id OR pattern slug from `immunize list`."),
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation."),
 ) -> None:
-    """Delete an immunity's artifact files and DB row."""
+    """Delete an immunity's artifact files and DB row.
+
+    Accepts either an integer id or a pattern slug. If a slug resolves to more
+    than one injected record, the command lists the candidate ids and exits 1
+    so the user can disambiguate — removal is destructive and we won't guess.
+    """
     settings = load_settings()
     conn = storage.connect(settings.state_db_path)
-    row = storage.get_artifact(conn, artifact_id)
-    if row is None:
-        console_err.print(f"[red]immunize: no immunity with id {artifact_id}[/red]")
+    matches = _resolve_identifier(identifier, conn)
+    if not matches:
+        console_err.print(f"[red]immunize: no immunity matches {identifier!r}[/red]")
         raise typer.Exit(1)
-    if not yes and not typer.confirm(
-        f"Remove immunity '{row.slug}' (id={artifact_id})?", default=False
-    ):
+    if len(matches) > 1:
+        console_err.print(
+            f"[yellow]immunize: {len(matches)} immunities match slug {identifier!r}:[/yellow]"
+        )
+        for match in matches:
+            console_err.print(f"  id={match.id}  slug={match.slug}  created={match.created_at}")
+        console_err.print("[yellow]Re-run `immunize remove <id>` with a specific id.[/yellow]")
+        raise typer.Exit(1)
+
+    row = matches[0]
+    if not yes and not typer.confirm(f"Remove immunity '{row.slug}' (id={row.id})?", default=False):
         console_out.print("Cancelled.")
         return
     pytest_path_obj = Path(row.pytest_path) if row.pytest_path else Path()
@@ -293,26 +306,29 @@ def remove_cmd(
         pytest_path=pytest_path_obj,
     )
     inject.remove(paths)
-    storage.delete_artifact(conn, artifact_id)
+    storage.delete_artifact(conn, row.id)
     console_out.print(f"[green]Removed immunity '{row.slug}'.[/green]")
 
 
 # --- verify -----------------------------------------------------------------
 @app.command("verify")
 def verify_cmd(
-    artifact_id: int | None = typer.Argument(
-        None, help="Specific immunity id; omit to verify all."
+    identifier: str | None = typer.Argument(
+        None, help="Immunity id OR pattern slug; omit to verify all."
     ),
 ) -> None:
-    """Re-run pytest against an injected immunity (or all)."""
+    """Re-run pytest against an injected immunity (or all).
+
+    Accepts either an integer id or a pattern slug. Since verify is read-only,
+    a slug that matches multiple records verifies all of them.
+    """
     settings = load_settings()
     conn = storage.connect(settings.state_db_path)
-    if artifact_id is not None:
-        row = storage.get_artifact(conn, artifact_id)
-        if row is None:
-            console_err.print(f"[red]immunize: no immunity with id {artifact_id}[/red]")
+    if identifier is not None:
+        rows = _resolve_identifier(identifier, conn)
+        if not rows:
+            console_err.print(f"[red]immunize: no immunity matches {identifier!r}[/red]")
             raise typer.Exit(1)
-        rows = [row]
     else:
         rows = storage.list_artifacts(conn)
 
@@ -457,6 +473,20 @@ def author_pattern_cli(
 
 
 # --- helpers ----------------------------------------------------------------
+def _resolve_identifier(raw: str, conn) -> list[storage.ArtifactRow]:
+    """Resolve a CLI identifier (int id or pattern slug) to matching rows.
+
+    Digit-only strings are treated as ids and look up a single record (or
+    empty). Anything else is treated as a slug and returns every record with
+    that slug — multi-match happens when the user's project has been
+    re-immunized against the same pattern with ``--force``.
+    """
+    if raw.isdigit():
+        row = storage.get_artifact(conn, int(raw))
+        return [row] if row else []
+    return [r for r in storage.list_artifacts(conn) if r.slug == raw]
+
+
 def _emit_json(obj: dict) -> None:
     """Write exactly one line of JSON to stdout. Never through Rich."""
     sys.stdout.write(json.dumps(obj) + "\n")
