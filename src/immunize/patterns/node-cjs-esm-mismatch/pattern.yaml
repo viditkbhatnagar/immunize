@@ -1,0 +1,41 @@
+id: node-cjs-esm-mismatch
+version: 1
+schema_version: 1
+author: "@sumithswaroop"
+origin: bundled
+error_class: module
+languages:
+  - javascript
+  - typescript
+description: "Node module mixes CommonJS require() with ES Module syntax (or runs ESM code in a CJS context); Node refuses to load it."
+
+match:
+  # Two stable Node stderr phrases with zero false-positive surface:
+  #
+  #  1. `Cannot use import statement outside a module` — emitted by V8's
+  #     parser when a .js/.cjs file contains a top-level `import` and the
+  #     surrounding package.json doesn't declare "type": "module".
+  #  2. `require is not defined in ES module scope` — emitted by Node's
+  #     ESM loader when an .mjs file (or a "type": "module" package) calls
+  #     `require()`, which doesn't exist in the ESM global.
+  #
+  # The first is a SyntaxError so language signatures don't fire — single
+  # anchor at 0.30 just clears the global floor. The second is a
+  # ReferenceError, which DOES match the matcher's `\bReferenceError\b`
+  # JavaScript signature, scoring 0.30 + 0.10 = 0.40. Threshold is set to
+  # 0.30 so both sample shapes clear cleanly. No error_class_hint — none
+  # of the existing hint classes (cors, import, auth, etc.) apply
+  # cleanly; "Cannot find module" lives under `import` but means a
+  # different bug (missing dependency on disk, not module-system mixing).
+  stderr_patterns:
+    - "Cannot use import statement outside a module"
+    - "require is not defined in ES module scope"
+  stdout_patterns: []
+  error_class_hint: null
+  min_confidence: 0.30
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30

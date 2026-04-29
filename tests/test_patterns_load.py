@@ -26,6 +26,7 @@ EXPECTED_IDS = {
     "rate-limit-no-backoff",
     "async-fn-called-without-await",
     "timezone-naive-datetime",
+    "node-cjs-esm-mismatch",
 }
 
 
