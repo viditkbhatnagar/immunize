@@ -28,6 +28,7 @@ EXPECTED_IDS = {
     "timezone-naive-datetime",
     "node-cjs-esm-mismatch",
     "promise-unhandled-rejection",
+    "json-decode-no-handling",
 }
 
 

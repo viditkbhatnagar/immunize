@@ -1,0 +1,42 @@
+id: json-decode-no-handling
+version: 1
+schema_version: 1
+author: "@sumithswaroop"
+origin: bundled
+error_class: parse
+languages:
+  - python
+description: "json.loads() (or response.json()) called on data from outside the process without try/except; the first malformed payload — an HTML error page, an empty body, a truncated response — crashes the script with a raw JSONDecodeError."
+
+match:
+  # Three stable CPython phrasings, all of which appear in real
+  # tracebacks:
+  #
+  #  1. `json.decoder.JSONDecodeError` — the canonical fully-qualified
+  #     class name on the final traceback line.
+  #  2. `json.JSONDecodeError`         — the re-exported short form on
+  #     the `json` module surface; sometimes shows up first when the
+  #     decoder is invoked indirectly (requests' .json(), httpx, etc.).
+  #  3. `Expecting value: line` — the most common decoder message;
+  #     rejects raw `KeyError`-style traces that happen to mention
+  #     "expecting" elsewhere.
+  #
+  # Single-anchor + `import` hint? No — JSONDecodeError isn't an import
+  # error. Leave error_class_hint null; python lang detection contributes
+  # 0.10 alongside the 0.30 stderr score, totalling 0.40. Threshold 0.40
+  # accepts that combination cleanly and rejects bare references to
+  # `JSONDecodeError` outside a real Python traceback (e.g. log lines
+  # that happen to mention the class name without context).
+  stderr_patterns:
+    - "json\\.decoder\\.JSONDecodeError"
+    - "json\\.JSONDecodeError"
+    - "Expecting value: line"
+  stdout_patterns: []
+  error_class_hint: null
+  min_confidence: 0.40
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30
