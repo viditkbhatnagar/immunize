@@ -1,0 +1,92 @@
+---
+description: Wrap json.loads() and response.json() in try/except json.JSONDecodeError when the input comes from outside the process; translate to a typed module exception instead of leaking the decoder error.
+globs: **/*.py
+alwaysApply: false
+---
+
+When the JSON came from outside the process, parsing it can fail. An
+upstream service returns an HTML error page instead of JSON. A file is
+truncated. An environment variable holds a leftover Python repr. An AI
+that never wraps `json.loads` lets the raw decoder exception escape:
+
+    json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+Catch the decoder exception at the same boundary you catch other I/O
+errors, and translate it into your module's own typed exception. Don't
+leak `json.JSONDecodeError` across an API surface — callers shouldn't
+have to import `json` to handle bad input from somewhere else.
+
+## Example
+
+Wrong — a malformed payload crashes with the raw decoder error:
+
+```python
+import json
+
+def parse_config(text: str) -> dict:
+    return json.loads(text)
+```
+
+Right — wrap, translate, preserve the cause:
+
+```python
+import json
+
+class ConfigError(Exception):
+    pass
+
+def parse_config(text: str) -> dict:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(
+            f"invalid JSON config at line {exc.lineno}, "
+            f"column {exc.colno}: {exc.msg}"
+        ) from exc
+```
+
+`raise ... from exc` keeps the original traceback chained so callers
+debugging in a REPL still see the underlying decoder message.
+
+## When to NOT wrap
+
+If the JSON is generated *inside* this process and a decode failure
+genuinely is a programmer bug, let it crash. Wrapping always-trusted
+inputs hides bugs. The rule is: wrap inputs from the file system,
+network, environment, or user; don't wrap your own `json.dumps` output
+fed back through `json.loads` in the same module.
+
+## `response.json()` is the same trap
+
+`requests.Response.json()` and `httpx.Response.json()` raise
+`json.JSONDecodeError` (or a thin wrapper) on non-JSON bodies — the
+same failure shape as `json.loads`. The same `try/except` rule
+applies.
+
+```python
+import json
+import requests
+
+def fetch_user(user_id: str) -> dict:
+    response = requests.get(f"https://api.example.com/users/{user_id}")
+    response.raise_for_status()
+    try:
+        return response.json()
+    except json.JSONDecodeError as exc:
+        raise UpstreamError(f"user API returned non-JSON: {exc.msg}") from exc
+```
+
+## Don't catch `Exception`
+
+Bare `except:` or `except Exception:` swallows real bugs (typos,
+attribute errors, KeyboardInterrupt). Catch `json.JSONDecodeError`
+specifically. If you also need to handle I/O errors at the same call
+site, list them — `except (json.JSONDecodeError, OSError) as exc:` —
+not `except Exception:`.
+
+## Immunity note
+
+The verification calls `parse_config` with a truncated string and
+asserts the raised exception is *not* a `json.JSONDecodeError`. The
+repro re-raises the decoder error directly and fails the assertion;
+the fix raises a typed `ConfigError` and passes.
