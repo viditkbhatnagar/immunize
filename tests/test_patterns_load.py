@@ -27,6 +27,7 @@ EXPECTED_IDS = {
     "async-fn-called-without-await",
     "timezone-naive-datetime",
     "node-cjs-esm-mismatch",
+    "promise-unhandled-rejection",
 }
 
 

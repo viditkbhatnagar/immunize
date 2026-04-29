@@ -1,0 +1,90 @@
+---
+description: Terminate every Promise chain in .catch() and wrap every await in try/catch so rejections never escape as unhandled.
+globs: **/*.js,**/*.mjs,**/*.cjs,**/*.ts,**/*.tsx,**/*.jsx
+alwaysApply: false
+---
+
+Every Promise chain needs a terminal handler. Every `await` needs a
+surrounding `try`/`catch` (or a caller that has one). Rejections that
+escape both end up as:
+
+    UnhandledPromiseRejection
+    Uncaught (in promise) ...
+
+Recent Node versions abort the process on unhandled rejections by
+default. Browsers log them to the console and silently drop the result —
+worse, because downstream code keeps running with corrupted state.
+
+## Promise chains: terminate in `.catch()`
+
+Wrong — a rejected fetch escapes the chain:
+
+```js
+export function fetchUserName(id) {
+  return fetch(`/api/users/${id}`)
+    .then((r) => r.json())
+    .then((d) => d.name);
+}
+```
+
+Right — `.catch()` translates the rejection into a typed error the
+caller can handle:
+
+```js
+export function fetchUserName(id) {
+  return fetch(`/api/users/${id}`)
+    .then((r) => r.json())
+    .then((d) => d.name)
+    .catch((err) => {
+      throw new Error(`failed to fetch user ${id}: ${err.message}`);
+    });
+}
+```
+
+## async/await: wrap the awaitable in try/catch
+
+Wrong — `await` re-raises into the async function's caller, which may
+not exist (top-level event handler, fire-and-forget):
+
+```js
+async function syncUser(id) {
+  const user = await fetchUserName(id);
+  cache.set(id, user);
+}
+```
+
+Right — handle the rejection at the boundary:
+
+```js
+async function syncUser(id) {
+  try {
+    const user = await fetchUserName(id);
+    cache.set(id, user);
+  } catch (err) {
+    logger.warn({ id, err }, "user sync failed");
+  }
+}
+```
+
+## Don't return a chain from a fire-and-forget call
+
+If you call `something().then(...)` and don't `return` or `await` the
+result, you've thrown the chain on the floor. Either:
+
+- `return` it so the caller's chain takes responsibility, or
+- `await` it inside a `try`, or
+- end with an explicit `.catch()` that handles or logs.
+
+## When global handlers are still useful
+
+Even with disciplined per-chain handling, register
+`process.on('unhandledRejection', ...)` (Node) or
+`window.addEventListener('unhandledrejection', ...)` (browser) as a
+last-resort safety net for code paths you haven't found yet. Don't use
+the global handler as a substitute for local handling.
+
+## Immunity note
+
+The verification scans the fixture for a Promise chain (`.then(`) and
+asserts a corresponding `.catch(` exists. The repro is missing the
+handler and fails the assertion; the fix adds `.catch(` and passes.
