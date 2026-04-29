@@ -286,6 +286,36 @@ def test_cli_install_hook_accepts_project_dir_flag(tmp_path: Path) -> None:
     assert not (tmp_path / ".claude").exists()
 
 
+def test_cli_install_hook_warns_when_immunize_not_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the canonical hook command isn't reachable on PATH, install-hook
+    must surface a warning so the user knows the hook will silently fail
+    when Claude Code spawns it. Common on Windows after `pip install --user`,
+    where the Scripts dir isn't on PATH by default.
+    """
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    result = runner.invoke(app, ["install-hook"])
+    assert result.exit_code == 0
+    assert "not found on PATH" in result.output
+
+
+def test_cli_install_hook_no_warning_when_immunize_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The PATH warning must NOT fire when `immunize` is reachable — happy
+    path under venv installs and PATH-extended user installs.
+    """
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/local/bin/immunize")
+    result = runner.invoke(app, ["install-hook"])
+    assert result.exit_code == 0
+    assert "not found on PATH" not in result.output
+
+
 def test_cli_install_hook_force_overwrites_stale(tmp_path: Path) -> None:
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir()

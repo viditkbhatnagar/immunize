@@ -239,6 +239,8 @@ immunize run python manage.py migrate
 
 `immunize run` tees output live, propagates exit codes, and on non-zero exit feeds the same matcher pipeline.
 
+> **Windows note.** A user-scope `pip install immunize` puts `immunize.exe` in `%APPDATA%\Python\Python<ver>\Scripts\`, which is not on `PATH` by default. The hook command Claude Code runs is the bare `immunize capture …`, so the hook can't reach the executable until that Scripts directory is on `PATH`. The cleanest fix is to install inside a venv (`py -m venv .venv && .venv\Scripts\activate && pip install immunize`); the next-cleanest is adding the Scripts directory to user `PATH` (System Properties → Environment Variables, or `setx PATH "%PATH%;%APPDATA%\Python\Python<ver>\Scripts"`). Verify with `where immunize` before running `install-hook`.
+
 ---
 
 ## The four trigger paths
@@ -750,7 +752,7 @@ The DB is **local state only** — auto-`.gitignore`d via the install-hook flow.
 | Atomic writes | Every artifact write is PID-suffixed temp + `os.replace`. Concurrent immunize processes (e.g. a hook firing during a manual capture) never observe a partial file. |
 | Hook scope | We modify project-scope `.claude/settings.json` only, never user-scope `~/.claude/settings.json` (a global hook would fire in unrelated projects). |
 | Idempotence | `install-hook` and `install-skill` are no-ops on identical re-invocation; `--force` is required to overwrite drifted entries. |
-| OS support | POSIX only (macOS/Linux). The CLI guard refuses to run on `win32` with a clear message. Windows on the roadmap. |
+| OS support | macOS, Linux, and Windows. The full pipeline (capture → match → verify → inject) and CLI run on all three; CI exercises every supported Python version on Linux + Windows. |
 
 ---
 
@@ -782,7 +784,7 @@ Tracked in [`_planning/LAUNCH_LIBRARY.md`](./_planning/LAUNCH_LIBRARY.md) and CH
 | `v0.1.x` | Core pipeline, 7 bundled patterns, manual capture | shipped |
 | `v0.2.x` | Claude Code hook automation, `immunize run`, calibrated matcher | **current** (latest tag `v0.2.1`) |
 | `main` (post-v0.2.1) | 4 new patterns: `timezone-naive-datetime`, `node-cjs-esm-mismatch`, `promise-unhandled-rejection`, `json-decode-no-handling` (library now 11) | merged, awaiting release |
-| `v0.3.x` | Native test runners (Jest/Go/cargo), Windows support, more patterns | planned |
+| `v0.3.x` | Native test runners (Jest/Go/cargo), more patterns | planned |
 | `v0.4+` | Community pattern registry, IDE-side telemetry opt-in | exploratory |
 
 Explicit non-goals: web dashboard, MCP server, always-on shell daemon, IDE extensions. The premise is to *emit files the existing tools already read*.
