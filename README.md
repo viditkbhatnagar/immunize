@@ -750,7 +750,7 @@ The DB is **local state only** — auto-`.gitignore`d via the install-hook flow.
 | Atomic writes | Every artifact write is PID-suffixed temp + `os.replace`. Concurrent immunize processes (e.g. a hook firing during a manual capture) never observe a partial file. |
 | Hook scope | We modify project-scope `.claude/settings.json` only, never user-scope `~/.claude/settings.json` (a global hook would fire in unrelated projects). |
 | Idempotence | `install-hook` and `install-skill` are no-ops on identical re-invocation; `--force` is required to overwrite drifted entries. |
-| OS support | POSIX only (macOS/Linux). The CLI guard refuses to run on `win32` with a clear message. Windows on the roadmap. |
+| OS support | macOS, Linux, and Windows. The full pipeline (capture → match → verify → inject) and CLI run on all three; CI exercises every supported Python version on Linux + Windows. |
 
 ---
 
@@ -782,7 +782,7 @@ Tracked in [`_planning/LAUNCH_LIBRARY.md`](./_planning/LAUNCH_LIBRARY.md) and CH
 | `v0.1.x` | Core pipeline, 7 bundled patterns, manual capture | shipped |
 | `v0.2.x` | Claude Code hook automation, `immunize run`, calibrated matcher | **current** (latest tag `v0.2.1`) |
 | `main` (post-v0.2.1) | 4 new patterns: `timezone-naive-datetime`, `node-cjs-esm-mismatch`, `promise-unhandled-rejection`, `json-decode-no-handling` (library now 11) | merged, awaiting release |
-| `v0.3.x` | Native test runners (Jest/Go/cargo), Windows support, more patterns | planned |
+| `v0.3.x` | Native test runners (Jest/Go/cargo), more patterns | planned |
 | `v0.4+` | Community pattern registry, IDE-side telemetry opt-in | exploratory |
 
 Explicit non-goals: web dashboard, MCP server, always-on shell daemon, IDE extensions. The premise is to *emit files the existing tools already read*.

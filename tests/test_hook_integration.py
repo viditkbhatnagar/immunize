@@ -36,8 +36,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 # Fixture: the actual JSON Claude Code PostToolUseFailure sent on 2026-04-18,
 # with one field redacted (`cwd` and `transcript_path` template-ified so the
 # test re-parameterizes them per-tmp_path). Everything else is byte-for-byte.
@@ -80,8 +78,18 @@ _REAL_HOOK_PAYLOAD_TEMPLATE = {
 
 
 def _materialise_payload(cwd: Path) -> str:
-    """Fill the {CWD} placeholders and return the JSON string Claude Code would send."""
-    rendered = json.loads(json.dumps(_REAL_HOOK_PAYLOAD_TEMPLATE).replace("{CWD}", str(cwd)))
+    """Fill the {CWD} placeholders and return the JSON string Claude Code would send.
+
+    Substitution happens on the dict — not on the serialized JSON — because
+    on Windows `str(cwd)` contains backslashes that would be parsed as JSON
+    escape sequences (\\U, \\A, …) on the second json.loads.
+    """
+    cwd_str = str(cwd)
+    rendered = {
+        **_REAL_HOOK_PAYLOAD_TEMPLATE,
+        "transcript_path": _REAL_HOOK_PAYLOAD_TEMPLATE["transcript_path"].replace("{CWD}", cwd_str),
+        "cwd": cwd_str,
+    }
     return json.dumps(rendered)
 
 
@@ -197,7 +205,6 @@ def test_real_hook_payload_shape_documents_error_prefix(tmp_path: Path) -> None:
     assert "command" in payload["tool_input"]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="immunize currently does not support Windows")
 def test_subprocess_entrypoint_is_python_m_immunize() -> None:
     """Smoke check that the entrypoint Claude Code's hook command relies on
     (``immunize`` on PATH, which is equivalent to ``python -m immunize``)

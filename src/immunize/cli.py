@@ -34,17 +34,6 @@ console_out = Console()
 console_err = Console(stderr=True)
 
 
-@app.callback()
-def _guard() -> None:
-    """Global guard registered once — no per-command duplication."""
-    if sys.platform == "win32":
-        console_err.print(
-            "immunize does not yet support Windows. "
-            "Track https://github.com/viditkbhatnagar/immunize/issues for Windows support."
-        )
-        raise typer.Exit(1)
-
-
 # --- capture ----------------------------------------------------------------
 _SOURCE_OPT = typer.Option("manual", "--source")
 _STDIN_PLAIN_OPT = typer.Option(
