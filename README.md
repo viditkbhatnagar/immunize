@@ -239,6 +239,8 @@ immunize run python manage.py migrate
 
 `immunize run` tees output live, propagates exit codes, and on non-zero exit feeds the same matcher pipeline.
 
+> **Windows note.** A user-scope `pip install immunize` puts `immunize.exe` in `%APPDATA%\Python\Python<ver>\Scripts\`, which is not on `PATH` by default. The hook command Claude Code runs is the bare `immunize capture …`, so the hook can't reach the executable until that Scripts directory is on `PATH`. The cleanest fix is to install inside a venv (`py -m venv .venv && .venv\Scripts\activate && pip install immunize`); the next-cleanest is adding the Scripts directory to user `PATH` (System Properties → Environment Variables, or `setx PATH "%PATH%;%APPDATA%\Python\Python<ver>\Scripts"`). Verify with `where immunize` before running `install-hook`.
+
 ---
 
 ## The four trigger paths

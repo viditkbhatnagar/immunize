@@ -323,6 +323,8 @@ def install_hook_cmd(
     Also adds ``hook_payloads/`` to ``.immunize/.gitignore`` so debug dumps
     written by the hook don't land in commits.
     """
+    import shutil
+
     from immunize.hook_installer import install_claude_code_hook
 
     target = project_dir if project_dir is not None else Path.cwd()
@@ -339,6 +341,19 @@ def install_hook_cmd(
     else:
         console_err.print(f"[red]immunize install-hook: {result.error}[/red]")
         raise typer.Exit(1)
+
+    # The canonical hook command is the bare `immunize` executable; if it
+    # isn't reachable on PATH the hook will silently fail when Claude Code
+    # spawns it. Most common on Windows after `pip install --user`, where
+    # immunize.exe lands in %APPDATA%\Python\Python<ver>\Scripts and that
+    # directory isn't on PATH by default.
+    if shutil.which("immunize") is None:
+        console_err.print(
+            "[yellow]Warning: 'immunize' was not found on PATH. The hook will "
+            "fail to spawn until the executable is reachable. On Windows, "
+            "either install inside a venv or add %APPDATA%\\Python\\Python<ver>"
+            "\\Scripts\\ to PATH; verify with `where immunize`.[/yellow]"
+        )
 
 
 # --- author-pattern ---------------------------------------------------------
