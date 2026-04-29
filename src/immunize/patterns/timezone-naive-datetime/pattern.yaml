@@ -1,0 +1,33 @@
+id: timezone-naive-datetime
+version: 1
+schema_version: 1
+author: "@sumithswaroop"
+origin: bundled
+error_class: type_error
+languages:
+  - python
+description: "datetime.now() returns a naive datetime; comparing or subtracting it from an aware datetime (e.g. from an HTTP API) raises TypeError."
+
+match:
+  # Anchors are the two canonical CPython error strings emitted by the
+  # rich-comparison and subtraction operators when one side is offset-naive
+  # and the other is offset-aware. Both phrases are stable across CPython
+  # 3.10–3.13 and have zero false-positive surface — they appear nowhere
+  # else in the standard library or major SDK error messages.
+  #
+  # Single-anchor match (0.30) + type_error hint (0.15) + python lang (0.10)
+  # = 0.55, comfortably clearing the 0.40 threshold. Threshold is set above
+  # the 0.30 floor so a bare `type_error` hint elsewhere in stderr cannot
+  # trigger a match without one of the anchors firing.
+  stderr_patterns:
+    - "can't compare offset-naive and offset-aware datetimes"
+    - "can't subtract offset-naive and offset-aware datetimes"
+  stdout_patterns: []
+  error_class_hint: type_error
+  min_confidence: 0.40
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30

@@ -1,0 +1,42 @@
+id: promise-unhandled-rejection
+version: 1
+schema_version: 1
+author: "@sumithswaroop"
+origin: bundled
+error_class: async
+languages:
+  - javascript
+  - typescript
+description: "A Promise chain has no .catch() (or an async function awaits without try/catch); the first rejection escapes as an unhandled rejection and the process aborts."
+
+match:
+  # Three Node/V8/browser phrasings that all signal the same root cause:
+  # a Promise rejected with no downstream handler.
+  #
+  #  1. `UnhandledPromiseRejection` — Node ≥14 default top-level error
+  #     (also seen under the deprecated `UnhandledPromiseRejectionWarning`
+  #     prefix on older Node; both contain this substring).
+  #  2. `Unhandled promise rejection` — Chromium DevTools console phrasing.
+  #  3. `Uncaught \(in promise\)` — Firefox + Safari + Chromium variant
+  #     when the rejection bubbles all the way out of the microtask queue.
+  #
+  # Single-anchor + JS lang detection (matcher fires on the typical
+  # `at Object.<anonymous>` or `ReferenceError`/`TypeError` companion line
+  # in the stack) = 0.30 + 0.10 = 0.40, comfortably clearing 0.30. None
+  # of the existing ERROR_CLASS_HINTS cleanly fit (it's not type_error or
+  # null_ref or import); leaving error_class_hint null avoids a wrong
+  # boost. Threshold 0.30 keeps headroom for bare-phrase samples that
+  # don't include a stack.
+  stderr_patterns:
+    - "UnhandledPromiseRejection"
+    - "Unhandled promise rejection"
+    - "Uncaught \\(in promise\\)"
+  stdout_patterns: []
+  error_class_hint: null
+  min_confidence: 0.30
+
+verification:
+  pytest_relative_path: test_template.py
+  expected_fail_without_fix: true
+  expected_pass_with_fix: true
+  timeout_seconds: 30

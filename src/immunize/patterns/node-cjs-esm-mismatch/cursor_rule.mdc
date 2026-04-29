@@ -1,0 +1,82 @@
+---
+description: Keep Node module syntax (require/module.exports vs import/export) consistent within a file and aligned with the file's module type.
+globs: **/*.mjs,**/*.cjs,**/*.js,**/*.ts
+alwaysApply: false
+---
+
+Pick one module system per file and stick with it. Mixing
+`require(...)` and `import` in the same Node module crashes at load
+time:
+
+    ReferenceError: require is not defined in ES module scope
+    SyntaxError: Cannot use import statement outside a module
+
+Node decides the module system per file by these rules, in order:
+
+1. File extension wins: `.mjs` is always ESM, `.cjs` is always CJS.
+2. Otherwise, the closest enclosing `package.json` decides via
+   `"type": "module"` (ESM) or `"type": "commonjs"` (CJS, the default).
+
+Once a file is loaded as ESM, `require` does not exist. Once a file is
+loaded as CJS, top-level `import` is a syntax error.
+
+## Example
+
+Wrong — mixed syntax in a `.mjs` file:
+
+```js
+// readers.mjs
+const fs = require("fs");
+import path from "path";
+
+export function readFirstLine(filename) {
+  return fs.readFileSync(filename, "utf8").split(path.sep)[0];
+}
+```
+
+Right — consistent ESM:
+
+```js
+// readers.mjs
+import fs from "fs";
+import path from "path";
+
+export function readFirstLine(filename) {
+  return fs.readFileSync(filename, "utf8").split(path.sep)[0];
+}
+```
+
+Or consistent CJS:
+
+```js
+// readers.cjs
+const fs = require("fs");
+const path = require("path");
+
+function readFirstLine(filename) {
+  return fs.readFileSync(filename, "utf8").split(path.sep)[0];
+}
+module.exports = { readFirstLine };
+```
+
+## When you actually need both
+
+Inside an ESM file, `import("...")` (the dynamic-import expression) is
+the only way to load a CJS module — never call `require`. Inside a CJS
+file, you cannot synchronously load ESM at all; either rewrite the
+caller as ESM or use top-level await with dynamic `import()` in a small
+ESM bridge file.
+
+## Don't reach for `createRequire`
+
+`createRequire(import.meta.url)` papers over the bug instead of fixing
+it: it gives you a working `require` inside an ESM file, but downstream
+tooling (bundlers, type checkers, the Node loader hooks) treats the
+file inconsistently. Pick one module system and convert the rest of the
+file to match.
+
+## Immunity note
+
+The verification scans the fixture for `require(...)` calls in an `.mjs`
+file. The repro mixes `require` with `import` and fails the assertion;
+the fix uses `import` consistently and passes.
