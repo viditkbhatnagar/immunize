@@ -10,7 +10,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/immunize.svg)](https://pypi.org/project/immunize/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![CI](https://github.com/viditkbhatnagar/immunize/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/viditkbhatnagar/immunize/actions/workflows/ci.yml)
-[![Patterns](https://img.shields.io/badge/bundled%20patterns-7-success)](#bundled-pattern-library)
+[![Patterns](https://img.shields.io/badge/bundled%20patterns-11-success)](#bundled-pattern-library)
 [![Status](https://img.shields.io/badge/status-beta-yellow)](#)
 
 </div>
@@ -373,7 +373,7 @@ Two subtleties matter and are guarded by tests:
 
 ## Bundled pattern library
 
-Seven patterns ship in `v0.2.x`, calibrated against 35+ real-world stderr samples. Recall details in [`_planning/MATCHER_CALIBRATION_V020.md`](./_planning/MATCHER_CALIBRATION_V020.md).
+Eleven patterns ship as of the latest `main`. The original seven were calibrated against 35+ real-world stderr samples; per-pattern recall details and the false-positive audit live in [`_planning/MATCHER_CALIBRATION_V020.md`](./_planning/MATCHER_CALIBRATION_V020.md).
 
 | ID | Languages | Class | Threshold | Catches |
 |---|---|---|---|---|
@@ -384,6 +384,10 @@ Seven patterns ship in `v0.2.x`, calibrated against 35+ real-world stderr sample
 | [`missing-env-var`](./src/immunize/patterns/missing-env-var/) | python | config | 0.40 | `KeyError: 'UPPER_SNAKE'` from `os.environ['…']` access |
 | [`rate-limit-no-backoff`](./src/immunize/patterns/rate-limit-no-backoff/) | python | rate_limit | 0.45 | `429 Too Many Requests`, `RateLimitError`, `HTTPError … 429`, `rate_limit_error` SDK responses |
 | [`async-fn-called-without-await`](./src/immunize/patterns/async-fn-called-without-await/) | python | async | 0.30 | `coroutine '<name>' was never awaited` |
+| [`timezone-naive-datetime`](./src/immunize/patterns/timezone-naive-datetime/) | python | type_error | 0.40 | `TypeError: can't compare/subtract offset-naive and offset-aware datetimes` (e.g., comparing `datetime.now()` with an HTTP API timestamp) |
+| [`node-cjs-esm-mismatch`](./src/immunize/patterns/node-cjs-esm-mismatch/) | js, ts | module | 0.30 | Node module mixes CommonJS `require()` with ES Module syntax — `Cannot use import statement outside a module` and `require is not defined in ES module scope` |
+| [`promise-unhandled-rejection`](./src/immunize/patterns/promise-unhandled-rejection/) | js, ts | async | 0.30 | Promise chain or `await` with no rejection handler — `UnhandledPromiseRejection`, `Unhandled promise rejection`, `Uncaught (in promise) …` |
+| [`json-decode-no-handling`](./src/immunize/patterns/json-decode-no-handling/) | python | parse | 0.40 | `json.loads()` / `response.json()` on untrusted input without `try/except` — leaks raw `json.decoder.JSONDecodeError` across the API boundary |
 
 Each directory contains:
 
@@ -533,7 +537,7 @@ immunize/
 │   ├── models.py                        # Pydantic v2: CapturePayload, Pattern, Settings, …
 │   ├── authoring/
 │   │   └── cli_author.py                # `author-pattern` (lazy-imports anthropic)
-│   ├── patterns/                        # 7 bundled patterns (slug-named dirs)
+│   ├── patterns/                        # 11 bundled patterns (slug-named dirs)
 │   └── skill_assets/
 │       └── immunize-manager/SKILL.md    # bundled skill
 └── tests/                               # 19 test modules covering every module
@@ -776,7 +780,8 @@ Tracked in [`_planning/LAUNCH_LIBRARY.md`](./_planning/LAUNCH_LIBRARY.md) and CH
 | Version | Theme | Status |
 |---|---|---|
 | `v0.1.x` | Core pipeline, 7 bundled patterns, manual capture | shipped |
-| `v0.2.x` | Claude Code hook automation, `immunize run`, calibrated matcher | **current** |
+| `v0.2.x` | Claude Code hook automation, `immunize run`, calibrated matcher | **current** (latest tag `v0.2.1`) |
+| `main` (post-v0.2.1) | 4 new patterns: `timezone-naive-datetime`, `node-cjs-esm-mismatch`, `promise-unhandled-rejection`, `json-decode-no-handling` (library now 11) | merged, awaiting release |
 | `v0.3.x` | Native test runners (Jest/Go/cargo), Windows support, more patterns | planned |
 | `v0.4+` | Community pattern registry, IDE-side telemetry opt-in | exploratory |
 
