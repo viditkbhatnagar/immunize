@@ -127,13 +127,20 @@ def run_with_capture(
     sigint_hits = [0]
 
     def _sigint_handler(signum, frame):  # noqa: ARG001
+        # First Ctrl-C: ask the child to clean up. Windows' subprocess.send_signal
+        # only accepts SIGTERM / CTRL_C_EVENT / CTRL_BREAK_EVENT and raises
+        # ValueError for SIGINT, so on Windows we go straight to terminate()
+        # (graceful) on the first hit and kill() on the second.
         sigint_hits[0] += 1
         try:
             if sigint_hits[0] == 1:
-                proc.send_signal(signal.SIGINT)
+                if sys.platform == "win32":
+                    proc.terminate()
+                else:
+                    proc.send_signal(signal.SIGINT)
             else:
                 proc.kill()
-        except (OSError, ProcessLookupError):
+        except (OSError, ValueError, ProcessLookupError):
             pass
 
     original_handler = None
