@@ -84,28 +84,41 @@ Existing answers each fall short:
 ## How it compares
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#94a3b8'}}}%%
 flowchart LR
-    classDef yes fill:#16a34a,stroke:#166534,color:#fff
-    classDef no fill:#dc2626,stroke:#7f1d1d,color:#fff
-    classDef partial fill:#f59e0b,stroke:#92400e,color:#fff
+    classDef tool fill:#ffffff,stroke:#64748b,stroke-width:1px,color:#0f172a
+    classDef hero fill:#1e3a8a,stroke:#0f172a,stroke-width:1.5px,color:#f8fafc
+    classDef cap fill:#f1f5f9,stroke:#cbd5e1,stroke-width:1px,color:#0f172a
 
-    subgraph Capabilities[" "]
+    subgraph Tools["Tools"]
         direction TB
-        C1[SKILL.md emit]
-        C2[Cursor rule emit]
-        C3[Verified pytest]
-        C4[Cross-tool]
-        C5[Team-shareable via git]
-        C6[Zero API key at runtime]
+        I["immunize"]:::hero
+        CB["Cursor Bugbot"]:::tool
+        CM["Claude Memory"]:::tool
+        SS["Sentry Seer"]:::tool
+        SA["Semgrep Assistant"]:::tool
+        CR["CodeRabbit"]:::tool
     end
 
-    immunize:::yes --> C1 & C2 & C3 & C4 & C5 & C6
-    Cursor_Bugbot:::partial --> C2
-    Claude_Memory:::partial --> C1
-    Sentry_Seer:::partial --> C2
-    Semgrep_Assistant:::partial --> C2
-    CodeRabbit:::partial --> C5
+    subgraph Caps["Capabilities"]
+        direction TB
+        C1["SKILL.md emit"]:::cap
+        C2["Cursor rule emit"]:::cap
+        C3["Verified pytest"]:::cap
+        C4["Cross-tool"]:::cap
+        C5["Team-shareable via git"]:::cap
+        C6["Zero API key at runtime"]:::cap
+    end
+
+    I --> C1 & C2 & C3 & C4 & C5 & C6
+    CM --> C1
+    CB --> C2
+    SS --> C2
+    SA --> C2
+    CR --> C5
+
+    style Tools fill:#f8fafc,stroke:#cbd5e1
+    style Caps fill:#f8fafc,stroke:#cbd5e1
 ```
 
 Only `immunize` ships **all six** at once. Verified regression tests are the structural moat — every other tool in this space stops at "we found a problem"; `immunize` proves the fix.
@@ -117,39 +130,43 @@ Only `immunize` ships **all six** at once. Verified regression tests are the str
 Three layers separate concerns cleanly: triggers, the engine, and the artifacts that land in your repo.
 
 ```mermaid
-%%{init: {'theme':'base', 'flowchart': {'curve': 'basis'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}, 'flowchart': {'curve':'basis'}}}%%
 flowchart TB
-    subgraph L1["LAYER 1 — Triggers (sensors)"]
+    classDef trigger fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef engine fill:#1e293b,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef store fill:#334155,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef artifact fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+
+    subgraph L1["Layer 1 · Triggers"]
         direction LR
-        T1["Claude Code<br/>PostToolUseFailure hook"]
-        T2["Shell wrapper<br/>immunize run &lt;cmd&gt;"]
-        T3["Bundled skill<br/>immunize-manager"]
-        T4["Manual CLI<br/>immunize capture &lt;json"]
+        T1["Claude Code hook<br/>PostToolUseFailure"]:::trigger
+        T2["Shell wrapper<br/>immunize run &lt;cmd&gt;"]:::trigger
+        T3["Bundled skill<br/>immunize-manager"]:::trigger
+        T4["Manual CLI<br/>immunize capture"]:::trigger
     end
 
-    subgraph L2["LAYER 2 — Engine (Python package)"]
+    subgraph L2["Layer 2 · Engine"]
         direction LR
-        E1[capture.py] --> E2[matcher.py]
-        E2 --> E3[verify.py]
-        E3 --> E4[inject.py]
-        E5[(SQLite<br/>.immunize/state.db)]
-        E1 -.persist.-> E5
-        E4 -.record.-> E5
+        E1["capture.py"]:::engine --> E2["matcher.py"]:::engine
+        E2 --> E3["verify.py"]:::engine
+        E3 --> E4["inject.py"]:::engine
+        E5[("SQLite<br/>.immunize/state.db")]:::store
+        E1 -. persist .-> E5
+        E4 -. record .-> E5
     end
 
-    subgraph L3["LAYER 3 — Generated artifacts (in your repo, committed)"]
+    subgraph L3["Layer 3 · Generated artifacts"]
         direction LR
-        A1[".claude/skills/immunize-&lt;slug&gt;/<br/>SKILL.md"]
-        A2[".cursor/rules/&lt;slug&gt;.mdc"]
-        A3["tests/immunized/&lt;slug&gt;/<br/>test_template.py"]
+        A1[".claude/skills/immunize-&lt;slug&gt;/<br/>SKILL.md"]:::artifact
+        A2[".cursor/rules/&lt;slug&gt;.mdc"]:::artifact
+        A3["tests/immunized/&lt;slug&gt;/<br/>test_template.py"]:::artifact
     end
 
-    L1 --> L2
-    L2 --> L3
+    L1 --> L2 --> L3
 
-    style L1 fill:#eff6ff,stroke:#1e40af
-    style L2 fill:#f0fdf4,stroke:#166534
-    style L3 fill:#fef3c7,stroke:#92400e
+    style L1 fill:#f8fafc,stroke:#cbd5e1
+    style L2 fill:#f8fafc,stroke:#cbd5e1
+    style L3 fill:#f8fafc,stroke:#cbd5e1
 ```
 
 - **Layer 1** is plural by design. A single failure can arrive from a Claude Code hook, a `immunize run` subprocess, the bundled skill nudging the model, or a manual JSON pipe.
@@ -163,32 +180,32 @@ flowchart TB
 The same five-step pipeline runs no matter which trigger fires:
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'actorBkg':'#1e293b', 'actorTextColor':'#f8fafc', 'actorLineColor':'#475569', 'signalColor':'#475569', 'signalTextColor':'#0f172a', 'labelBoxBkgColor':'#f1f5f9', 'labelBoxBorderColor':'#cbd5e1', 'labelTextColor':'#0f172a', 'noteBkgColor':'#f1f5f9', 'noteBorderColor':'#cbd5e1', 'noteTextColor':'#0f172a', 'sequenceNumberColor':'#f8fafc'}}}%%
 sequenceDiagram
     autonumber
     participant Tool as AI tool / shell
     participant CLI as immunize CLI
-    participant Match as matcher.py
-    participant Verify as verify.py
-    participant Inject as inject.py
-    participant Repo as Your repo (.claude/, .cursor/, tests/)
-    participant DB as .immunize/state.db
+    participant Match as matcher
+    participant Verify as verify
+    participant Inject as inject
+    participant Repo as Repository
+    participant DB as state.db
 
-    Tool->>CLI: failure JSON on stdin<br/>(Bash exit ≠ 0)
+    Tool->>CLI: failure JSON on stdin (Bash exit ≠ 0)
     CLI->>DB: persist CapturePayload
-    CLI->>Match: load_patterns() + match()
+    CLI->>Match: load_patterns and match
     Match-->>CLI: ranked MatchResult[]
     alt no pattern clears threshold
-        CLI-->>Tool: {"outcome":"unmatched"}
+        CLI-->>Tool: outcome unmatched
     else top pattern clears
-        CLI->>Verify: run pytest in subprocess<br/>(swap fix→repro fixture)
+        CLI->>Verify: pytest in subprocess (swap fix → repro)
         alt verify fails
-            CLI-->>Tool: {"outcome":"matched_verify_failed", reason}
+            CLI-->>Tool: outcome matched_verify_failed
         else verify passes
             CLI->>Inject: atomic write 3 artifacts
-            Inject->>Repo: SKILL.md + cursor_rule + test_template
+            Inject->>Repo: SKILL.md + cursor rule + test_template
             CLI->>DB: insert artifacts row
-            CLI-->>Tool: {"outcome":"matched_and_verified", artifacts}
+            CLI-->>Tool: outcome matched_and_verified
         end
     end
 ```
@@ -198,20 +215,25 @@ Stdout is a **strict one-line JSON contract**; Rich console output goes to stder
 ### Decision tree at the matcher
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart TD
-    A[CapturePayload arrives] --> B[Compile regex rules per pattern<br/>cached by pattern.id]
-    B --> C[Score each pattern<br/>= stderr + stdout + class hint + language]
-    C --> D{confidence ≥<br/>per-pattern<br/>min_confidence?}
-    D -->|no| E[drop]
-    D -->|yes| F{confidence ≥<br/>global floor<br/>IMMUNIZE_MIN_MATCH_CONFIDENCE?}
-    F -->|no| E
-    F -->|yes| G[sort desc by confidence]
-    G --> H[take top 1]
-    H --> I[verify in subprocess]
-    I -->|pass| J[inject + persist]
-    I -->|fail| K[emit matched_verify_failed]
-    E --> L[emit unmatched]
+    classDef step fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef gate fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef ok fill:#1e3a8a,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef drop fill:#f8fafc,stroke:#94a3b8,stroke-width:1px,color:#475569,stroke-dasharray:3 3
+
+    A["CapturePayload arrives"]:::step --> B["Compile regex per pattern · cached by pattern.id"]:::step
+    B --> C["Score = stderr + stdout + class hint + language"]:::step
+    C --> D{"≥ per-pattern<br/>min_confidence?"}:::gate
+    D -- no --> E["Drop"]:::drop
+    D -- yes --> F{"≥ global floor<br/>IMMUNIZE_MIN_MATCH_CONFIDENCE?"}:::gate
+    F -- no --> E
+    F -- yes --> G["Sort desc by confidence"]:::step
+    G --> H["Take top 1"]:::step
+    H --> I["Verify in subprocess"]:::ok
+    I -- pass --> J["Inject and persist"]:::ok
+    I -- fail --> K["Emit matched_verify_failed"]:::drop
+    E --> L["Emit unmatched"]:::drop
 ```
 
 Each gate is documented in [`src/immunize/matcher.py`](./src/immunize/matcher.py) and [`src/immunize/cli.py`](./src/immunize/cli.py).
@@ -246,22 +268,26 @@ immunize run python manage.py migrate
 Four entry points, one engine. Picking the right one is just a matter of where your failures originate.
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart LR
+    classDef src fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef trg fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef eng fill:#1e3a8a,stroke:#0f172a,stroke-width:1.5px,color:#f8fafc
+
     subgraph In["Where the failure happens"]
         direction TB
-        F1["Claude Code<br/>(Bash tool call)"]
-        F2["Cursor / plain shell<br/>(your terminal)"]
-        F3["Claude Code<br/>(no hook configured)"]
-        F4["Existing log<br/>or scripted replay"]
+        F1["Claude Code · Bash tool"]:::src
+        F2["Cursor / plain shell"]:::src
+        F3["Claude Code · no hook configured"]:::src
+        F4["Existing log or scripted replay"]:::src
     end
 
     subgraph Triggers["Trigger path"]
         direction TB
-        T1["PostToolUseFailure hook<br/>--source claude-code-hook"]
-        T2["immunize run &lt;cmd&gt;<br/>--source shell-wrapper"]
-        T3["immunize-manager skill<br/>nudges Claude to call"]
-        T4["echo '{...}' | immunize capture<br/>--source manual"]
+        T1["PostToolUseFailure hook<br/>--source claude-code-hook"]:::trg
+        T2["immunize run &lt;cmd&gt;<br/>--source shell-wrapper"]:::trg
+        T3["immunize-manager skill<br/>nudges Claude to call"]:::trg
+        T4["echo '{...}' &#124; immunize capture<br/>--source manual"]:::trg
     end
 
     F1 --> T1
@@ -269,8 +295,10 @@ flowchart LR
     F3 --> T3
     F4 --> T4
 
-    T1 & T2 & T3 & T4 --> ENGINE[("capture → match → verify → inject")]
-    style ENGINE fill:#10b981,color:#fff
+    T1 & T2 & T3 & T4 --> ENGINE[("capture → match → verify → inject")]:::eng
+
+    style In fill:#f8fafc,stroke:#cbd5e1
+    style Triggers fill:#f8fafc,stroke:#cbd5e1
 ```
 
 | Path | Set up by | Streams output? | Best for |
@@ -289,16 +317,23 @@ The hook payload is translated by [`payload_from_claude_code_hook`](./src/immuni
 A `Pattern` is a five-file directory under [`src/immunize/patterns/<slug>/`](./src/immunize/patterns/) and a YAML descriptor. The matcher scores each candidate by combining four signals:
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart LR
-    P[CapturePayload<br/>stderr + stdout] --> S1["stderr regex hits<br/>(min 0.6, +0.3 each)"]
-    P --> S2["stdout regex hits<br/>(min 0.4, +0.2 each)"]
-    P --> S3["error class hint<br/>+0.15 if matches"]
-    P --> S4["language detection<br/>+0.10 if pattern lang ∈ detected"]
-    S1 & S2 & S3 & S4 --> SUM[["Σ capped at 1.0"]]
-    SUM --> CMP{≥ pattern.min_confidence<br/>and<br/>≥ global floor?}
-    CMP -->|yes| RANK[ranked candidate]
-    CMP -->|no| DROP[dropped]
+    classDef input fill:#1e293b,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef signal fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef agg fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef gate fill:#ffffff,stroke:#1e3a8a,stroke-width:1.5px,color:#0f172a
+    classDef ok fill:#1e3a8a,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef drop fill:#f8fafc,stroke:#94a3b8,color:#475569,stroke-dasharray:3 3
+
+    P["CapturePayload<br/>stderr + stdout"]:::input --> S1["stderr regex<br/>min 0.6, +0.3 each"]:::signal
+    P --> S2["stdout regex<br/>min 0.4, +0.2 each"]:::signal
+    P --> S3["error class hint<br/>+0.15 if match"]:::signal
+    P --> S4["language detection<br/>+0.10 if pattern lang ∈ detected"]:::signal
+    S1 & S2 & S3 & S4 --> SUM[["Σ capped at 1.0"]]:::agg
+    SUM --> CMP{"≥ pattern.min_confidence<br/>and global floor?"}:::gate
+    CMP -- yes --> RANK["ranked candidate"]:::ok
+    CMP -- no --> DROP["dropped"]:::drop
 ```
 
 Implementation references:
@@ -325,19 +360,24 @@ Pre-`v0.2.0` the global floor was `0.70` and silently shadowed every per-pattern
 A pattern only ships if its pytest **fails** without the fix and **passes** with it. The harness re-checks the *passes-with-fix* half on the user's machine before injecting, catching environment drift (missing optional deps, pytest version skew):
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart TB
-    Start([verify.verify pattern]) --> Has{fixtures/ has<br/>repro.* + fix.* pair?}
-    Has -->|no| Run[run pytest as-is]
-    Has -->|yes| Backup[read repro.* bytes<br/>into memory]
-    Backup --> Swap[write fix.* bytes<br/>over repro.* path]
+    classDef step fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef gate fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef ok fill:#1e3a8a,stroke:#0f172a,stroke-width:1.5px,color:#f8fafc
+    classDef bad fill:#f8fafc,stroke:#94a3b8,color:#475569,stroke-dasharray:3 3
+
+    Start(["verify.verify pattern"]):::ok --> Has{"fixtures/ has<br/>repro.* + fix.* pair?"}:::gate
+    Has -- no --> Run["Run pytest as-is"]:::step
+    Has -- yes --> Backup["Read repro.* bytes into memory"]:::step
+    Backup --> Swap["Write fix.* bytes over repro.* path"]:::step
     Swap --> Run
-    Run --> Sub[python -m pytest -x -q<br/>cwd = pattern dir<br/>timeout = 30s]
-    Sub --> Code{exit code?}
-    Code -->|0| Pass([VerificationResult passed=True])
-    Code -->|1, 2, 5| Fail([VerificationResult passed=False<br/>+ truncated diagnostic])
-    Code -->|TimeoutExpired| TO([passed=False<br/>error: pytest timed out])
-    Sub --> Restore[finally: write original<br/>repro.* bytes back]
+    Run --> Sub["python -m pytest -x -q<br/>cwd = pattern dir · timeout = 30s"]:::step
+    Sub --> Code{"exit code?"}:::gate
+    Code -- "0" --> Pass(["passed = True"]):::ok
+    Code -- "1, 2, 5" --> Fail(["passed = False<br/>+ truncated diagnostic"]):::bad
+    Code -- "TimeoutExpired" --> TO(["passed = False<br/>error: pytest timed out"]):::bad
+    Sub --> Restore["finally: write original repro.* bytes back"]:::step
     Restore --> Pass
     Restore --> Fail
     Restore --> TO
@@ -354,14 +394,18 @@ The CI path is stricter than runtime — it runs the full three-phase swap so a 
 Three files land in fixed paths inside the user's project, each via an atomic write (PID-suffixed temp + `os.replace`):
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart LR
-    Pattern[("src/immunize/patterns/&lt;slug&gt;/")]
-    Pattern --> SKILL[SKILL.md] --> O1[".claude/skills/immunize-&lt;slug&gt;/SKILL.md"]
-    Pattern --> CR[cursor_rule.mdc] --> O2[".cursor/rules/&lt;slug&gt;.mdc"]
-    Pattern --> TEST[test_template.py] --> O3["tests/immunized/&lt;slug&gt;/test_template.py"]
-    Pattern --> FIX["fixtures/repro.* + fix.*"] --> O4["tests/immunized/&lt;slug&gt;/fixtures/<br/>(repro slot receives FIX bytes)"]
-    Pattern --> SG[semgrep.yml<br/>optional] --> O5[".semgrep/&lt;slug&gt;.yml"]
+    classDef src fill:#1e293b,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef art fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef out fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+
+    Pattern[("src/immunize/patterns/&lt;slug&gt;/")]:::src
+    Pattern --> SKILL["SKILL.md"]:::art --> O1[".claude/skills/immunize-&lt;slug&gt;/SKILL.md"]:::out
+    Pattern --> CR["cursor_rule.mdc"]:::art --> O2[".cursor/rules/&lt;slug&gt;.mdc"]:::out
+    Pattern --> TEST["test_template.py"]:::art --> O3["tests/immunized/&lt;slug&gt;/test_template.py"]:::out
+    Pattern --> FIX["fixtures/repro.* + fix.*"]:::art --> O4["tests/immunized/&lt;slug&gt;/fixtures/<br/>(repro slot receives FIX bytes)"]:::out
+    Pattern --> SG["semgrep.yml · optional"]:::art --> O5[".semgrep/&lt;slug&gt;.yml"]:::out
 ```
 
 Two subtleties matter and are guarded by tests:
@@ -409,21 +453,41 @@ Each directory contains:
 `immunize` ships eight commands. Help on each: `immunize <cmd> --help`.
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#94a3b8'}}}%%
 flowchart LR
-    classDef cap fill:#3b82f6,color:#fff
-    classDef mgmt fill:#a855f7,color:#fff
-    classDef setup fill:#10b981,color:#fff
-    classDef contrib fill:#f59e0b,color:#fff
+    classDef capture fill:#1e3a8a,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef mgmt fill:#334155,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef setup fill:#0f766e,stroke:#0f172a,stroke-width:1px,color:#f8fafc
+    classDef contrib fill:#475569,stroke:#0f172a,stroke-width:1px,color:#f8fafc
 
-    capture[capture]:::cap
-    run[run]:::cap
-    list[list]:::mgmt
-    verify[verify]:::mgmt
-    remove[remove]:::mgmt
-    install_skill[install-skill]:::setup
-    install_hook[install-hook]:::setup
-    author_pattern[author-pattern]:::contrib
+    subgraph Cap["Capture"]
+        direction TB
+        capture["capture"]:::capture
+        run["run"]:::capture
+    end
+
+    subgraph Manage["Manage"]
+        direction TB
+        list["list"]:::mgmt
+        verify["verify"]:::mgmt
+        remove["remove"]:::mgmt
+    end
+
+    subgraph Setup["Setup"]
+        direction TB
+        install_skill["install-skill"]:::setup
+        install_hook["install-hook"]:::setup
+    end
+
+    subgraph Contribute["Contribute"]
+        direction TB
+        author_pattern["author-pattern"]:::contrib
+    end
+
+    style Cap fill:#f8fafc,stroke:#cbd5e1
+    style Manage fill:#f8fafc,stroke:#cbd5e1
+    style Setup fill:#f8fafc,stroke:#cbd5e1
+    style Contribute fill:#f8fafc,stroke:#cbd5e1
 ```
 
 | Command | Purpose |
@@ -478,14 +542,18 @@ Rich-formatted, human-readable output goes to **stderr**. Stdout is for machines
 Settings resolve highest-priority first:
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart TB
-    A[CLI flags] --> M{merge}
-    B[Environment vars<br/>IMMUNIZE_*] --> M
-    C[Project config<br/>.immunize/config.toml] --> M
-    D[User config<br/>~/.config/immunize/config.toml] --> M
-    E[Built-in defaults] --> M
-    M --> S[Settings]
+    classDef src fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef merge fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef out fill:#1e3a8a,stroke:#0f172a,stroke-width:1.5px,color:#f8fafc
+
+    A["CLI flags"]:::src --> M{"merge"}:::merge
+    B["Environment vars · IMMUNIZE_*"]:::src --> M
+    C[".immunize/config.toml"]:::src --> M
+    D["~/.config/immunize/config.toml"]:::src --> M
+    E["Built-in defaults"]:::src --> M
+    M --> S["Settings"]:::out
 ```
 
 | Setting | TOML key | Env var | Default |
@@ -550,8 +618,9 @@ immunize/
 Pydantic v2 models in [`src/immunize/models.py`](./src/immunize/models.py) define the contract:
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryColor':'#f1f5f9', 'primaryBorderColor':'#475569', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 classDiagram
+    direction LR
     class CapturePayload {
         +Source source
         +str|None tool_name
@@ -643,12 +712,12 @@ immunize author-pattern \
 Internally:
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'actorBkg':'#1e293b', 'actorTextColor':'#f8fafc', 'actorLineColor':'#475569', 'signalColor':'#475569', 'signalTextColor':'#0f172a', 'labelBoxBkgColor':'#f1f5f9', 'labelBoxBorderColor':'#cbd5e1', 'labelTextColor':'#0f172a', 'noteBkgColor':'#f1f5f9', 'noteBorderColor':'#cbd5e1', 'noteTextColor':'#0f172a'}}}%%
 sequenceDiagram
     participant CLI as author-pattern
-    participant API as Anthropic API (Claude)
+    participant API as Anthropic API
     participant Tmp as scratch dir
-    participant Lint as pattern_lint.py
+    participant Lint as pattern_lint
 
     CLI->>API: 1. analysis call (slug + error_class + languages + regex + confidence)
     API-->>CLI: tool_use response (forced JSON)
@@ -699,6 +768,7 @@ python scripts/pattern_lint.py
 A SQLite database at `<project>/.immunize/state.db` tracks captures and injections. Schema (see [`storage.py`](./src/immunize/storage.py)):
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'lineColor':'#475569', 'primaryColor':'#f1f5f9', 'primaryBorderColor':'#475569', 'primaryTextColor':'#0f172a'}}}%%
 erDiagram
     errors ||--o{ artifacts : "fingerprints"
     errors {
@@ -757,15 +827,20 @@ The DB is **local state only** — auto-`.gitignore`d via the install-hook flow.
 ## Continuous integration
 
 ```mermaid
-%%{init: {'theme':'base'}}%%
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Inter, system-ui, -apple-system, sans-serif', 'primaryTextColor':'#0f172a', 'lineColor':'#64748b'}}}%%
 flowchart LR
-    Push[push / PR] --> CI[ci.yml]
-    Tag[tag v*] --> Rel[release.yml]
-    CI --> Test[matrix 3.10 / 3.11 / 3.12<br/>pytest + ruff]
-    CI --> PLint[pattern_lint.py<br/>FAIL → PASS → FAIL-after-restore]
-    Test & PLint --> Green((green))
-    Rel --> Build[python -m build]
-    Build --> Pub[pypa/gh-action-pypi-publish<br/>OIDC trusted publisher]
+    classDef trig fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef job fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef step fill:#ffffff,stroke:#475569,stroke-width:1px,color:#0f172a
+    classDef ok fill:#1e3a8a,stroke:#0f172a,stroke-width:1.5px,color:#f8fafc
+
+    Push["push / PR"]:::trig --> CI["ci.yml"]:::job
+    Tag["tag v*"]:::trig --> Rel["release.yml"]:::job
+    CI --> Test["matrix 3.10 / 3.11 / 3.12<br/>pytest + ruff"]:::step
+    CI --> PLint["pattern_lint.py<br/>FAIL → PASS → FAIL-after-restore"]:::step
+    Test & PLint --> Green(("green")):::ok
+    Rel --> Build["python -m build"]:::step
+    Build --> Pub["pypa/gh-action-pypi-publish<br/>OIDC trusted publisher"]:::step
 ```
 
 - **`ci.yml`** — installs `[dev]` extras, runs `ruff check .`, `pytest`, and `python scripts/pattern_lint.py` on three Python versions in parallel.
