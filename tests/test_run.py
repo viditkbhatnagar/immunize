@@ -84,8 +84,11 @@ def test_run_no_capture_flag_skips_match_but_still_exits_child_code(
 
 
 def test_run_propagates_arbitrary_exit_code(tmp_path: Path) -> None:
-    # Exit codes other than 0/1 must propagate unmodified.
-    result = runner.invoke(app, ["run", "bash", "-c", "exit 42"])
+    # Exit codes other than 0/1 must propagate unmodified. Python (which
+    # is guaranteed available — we're running inside it) is a more portable
+    # vehicle than `bash`, which on GitHub Actions Windows runners flakes
+    # depending on which bash shim is first on PATH.
+    result = runner.invoke(app, ["run", sys.executable, "-c", "import sys; sys.exit(42)"])
     assert result.exit_code == 42
     # Capture still fires on non-zero exit.
     payload = _parse_stdout_json(result.output)
